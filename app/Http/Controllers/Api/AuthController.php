@@ -410,35 +410,112 @@ class AuthController extends Controller
      */
     public function loginAdmin(Request $request)
     {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required|string',
-        ]);
+        try {
+            $request->validate([
+                'email' => 'required|email',
+                'password' => 'required|string',
+            ]);
 
-        $email = strtolower(trim($request->email));
-        $admin = Admin::where('email', $email)->first();
+            // Check if admins table exists
+            if (!Schema::hasTable('admins')) {
+                Log::error('Admin login attempted but admins table does not exist');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Admin system not configured. Please run migrations.',
+                    'error' => config('app.debug') ? 'Table "admins" does not exist' : null,
+                ], 500);
+            }
 
-        if (!$admin || !Hash::check($request->password, $admin->password)) {
+            $email = strtolower(trim($request->email));
+            
+            try {
+                $admin = Admin::where('email', $email)->first();
+            } catch (\Exception $e) {
+                Log::error('Error querying admin table', [
+                    'error' => $e->getMessage(),
+                    'email' => $email,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Database error. Please contact administrator.',
+                    'error' => config('app.debug') ? $e->getMessage() : null,
+                ], 500);
+            }
+
+            if (!$admin) {
+                Log::warning('Admin login attempted with non-existent email', [
+                    'email' => $email,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Email atau password tidak valid.',
+                ], 401);
+            }
+
+            if (!Hash::check($request->password, $admin->password)) {
+                Log::warning('Admin login attempted with wrong password', [
+                    'email' => $email,
+                    'admin_id' => $admin->id,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Email atau password tidak valid.',
+                ], 401);
+            }
+
+            // Create token
+            try {
+                $tokenResult = $admin->createToken('admin-auth-token');
+                $token = $tokenResult->plainTextToken;
+                
+                // Log token creation for debugging
+                Log::info('Admin token created', [
+                    'admin_id' => $admin->id,
+                    'email' => $admin->email,
+                    'token_id' => $tokenResult->accessToken->id,
+                    'tokenable_type' => $tokenResult->accessToken->tokenable_type,
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Error creating admin token', [
+                    'error' => $e->getMessage(),
+                    'admin_id' => $admin->id,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal membuat token. Silakan coba lagi.',
+                    'error' => config('app.debug') ? $e->getMessage() : null,
+                ], 500);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Login berhasil.',
+                'token' => $token,
+                'user' => [
+                    'id' => $admin->id,
+                    'name' => $admin->name,
+                    'email' => $admin->email,
+                    'role' => 'admin',
+                ],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Email atau password tidak valid.',
-            ], 401);
+                'message' => 'Data tidak valid.',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Admin login error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'email' => $request->input('email'),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat login.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
         }
-
-        // Create token
-        $token = $admin->createToken('admin-auth-token')->plainTextToken;
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Login berhasil.',
-            'token' => $token,
-            'user' => [
-                'id' => $admin->id,
-                'name' => $admin->name,
-                'email' => $admin->email,
-                'role' => 'admin',
-            ],
-        ]);
     }
 
     /**
