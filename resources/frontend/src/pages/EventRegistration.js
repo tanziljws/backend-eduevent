@@ -45,17 +45,58 @@ function EventRegistration() {
 
   // Load Midtrans Snap for paid events
   useEffect(() => {
-    if (!event || event.is_free) return;
-    if (window.snap) { setSnapLoaded(true); return; }
-    const clientKey = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_MIDTRANS_CLIENT_KEY)
-      || (typeof process !== 'undefined' && process.env && process.env.REACT_APP_MIDTRANS_CLIENT_KEY);
-    if (!clientKey) return;
+    if (!event || event.is_free) {
+      setSnapLoaded(true); // Free events don't need payment gateway
+      return;
+    }
+    
+    // Check if snap is already loaded
+    if (window.snap) {
+      setSnapLoaded(true);
+      return;
+    }
+    
+    const clientKey = process.env.REACT_APP_MIDTRANS_CLIENT_KEY;
+    if (!clientKey) {
+      // No client key - allow direct registration without payment gateway
+      console.warn('Midtrans client key not configured. Payment gateway will be skipped.');
+      setSnapLoaded(true); // Set to true so button is enabled
+      return;
+    }
+    
     const script = document.createElement('script');
     script.src = 'https://app.sandbox.midtrans.com/snap/snap.js';
     script.setAttribute('data-client-key', clientKey);
-    script.onload = () => setSnapLoaded(true);
-    script.onerror = () => setSnapLoaded(false);
+    
+    // Set timeout for script loading (10 seconds)
+    const timeout = setTimeout(() => {
+      if (!window.snap) {
+        console.warn('Midtrans Snap script failed to load within timeout.');
+        setSnapLoaded(true); // Allow button to be clicked anyway
+      }
+    }, 10000);
+    
+    script.onload = () => {
+      clearTimeout(timeout);
+      if (window.snap) {
+        setSnapLoaded(true);
+      } else {
+        setSnapLoaded(true); // Allow button even if snap object not available
+      }
+    };
+    
+    script.onerror = () => {
+      clearTimeout(timeout);
+      console.error('Failed to load Midtrans Snap script.');
+      setSnapLoaded(true); // Allow button to be clicked anyway
+    };
+    
     document.body.appendChild(script);
+    
+    return () => {
+      clearTimeout(timeout);
+      // keep script for reuse; do not remove
+    };
   }, [event]);
 
   const fetchEvent = async () => {
@@ -85,31 +126,70 @@ function EventRegistration() {
 
   // Paid event: Midtrans checkout
   const handlePay = async () => {
-    if (!user) { navigate('/login'); return; }
+    if (!user) { 
+      navigate('/login'); 
+      return; 
+    }
     if (!event || event.is_free) return;
+    
     try {
       setIsPaying(true);
       setError(null);
+      
+      // If Midtrans is not configured, still create payment but show message
+      const clientKey = process.env.REACT_APP_MIDTRANS_CLIENT_KEY;
+      if (!clientKey || !window.snap) {
+        // No payment gateway configured - create registration anyway
+        const res = await eventService.createPayment(event.id);
+        setSuccess('Registrasi berhasil dibuat. Pembayaran akan diproses secara manual oleh admin.');
+        // Redirect to event detail or registration success page after delay
+        setTimeout(() => {
+          navigate(`/events/${id}`);
+        }, 2000);
+        return;
+      }
+      
       const res = await eventService.createPayment(event.id);
       const token = res?.snap_token;
+      
       if (token && window.snap) {
         window.snap.pay(token, {
           onSuccess: function() {
             setSuccess('Pembayaran berhasil. Status registrasi akan diperbarui.');
+            // Refresh page after a delay
+            setTimeout(() => {
+              window.location.reload();
+            }, 2000);
           },
           onPending: function() {
             setSuccess('Pembayaran tertunda. Silakan selesaikan pembayaran Anda.');
+            // Refresh page after a delay
+            setTimeout(() => {
+              window.location.reload();
+            }, 2000);
           },
           onError: function() {
             setError('Terjadi kesalahan saat memproses pembayaran.');
           },
-          onClose: function() {}
+          onClose: function() {
+            // Ditutup tanpa menyelesaikan pembayaran
+          }
         });
       } else {
-        setError('Snap belum termuat. Cek VITE_MIDTRANS_CLIENT_KEY dan reload halaman.');
+        // No token or snap not available - still allow registration
+        setSuccess('Registrasi berhasil dibuat. Silakan hubungi admin untuk pembayaran.');
+        setTimeout(() => {
+          navigate(`/events/${id}`);
+        }, 2000);
       }
     } catch (err) {
-      setError(err?.response?.data?.message || 'Gagal memulai pembayaran.');
+      console.error('Payment error:', err);
+      // On error, show error message
+      if (err?.response?.status === 404 || err?.response?.status === 400) {
+        setError(err?.response?.data?.message || 'Gagal memulai pembayaran. Silakan coba lagi.');
+      } else {
+        setError(err?.response?.data?.message || 'Gagal memulai pembayaran. Silakan coba lagi.');
+      }
     } finally {
       setIsPaying(false);
     }
