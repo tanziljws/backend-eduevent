@@ -27,9 +27,28 @@ class AdminController extends Controller
         try {
             $totalEvents = Event::count();
             $publishedEvents = Event::where('is_published', true)->count();
-            $totalRegistrations = EventRegistration::where('status', '!=', 'cancelled')->count();
+            
+            // Check if status column exists before filtering
+            $hasStatusColumn = Schema::hasColumn('registrations', 'status');
+            $totalRegistrations = $hasStatusColumn 
+                ? EventRegistration::where('status', '!=', 'cancelled')->count()
+                : EventRegistration::count();
+            
             $totalAttendances = Attendance::count();
-            $totalAttendees = Attendance::where('status', 'present')->count();
+            
+            // Check which column exists for attendance date and status
+            $hasCheckedInAt = Schema::hasColumn('attendances', 'checked_in_at');
+            $hasAttendanceTime = Schema::hasColumn('attendances', 'attendance_time');
+            $hasStatusColumnAtt = Schema::hasColumn('attendances', 'status');
+            
+            // Calculate total attendees based on available columns
+            $totalAttendees = 0;
+            if ($hasStatusColumnAtt) {
+                $totalAttendees = Attendance::where('status', 'present')->count();
+            } else {
+                // If no status column, all attendances are considered as present
+                $totalAttendees = $totalAttendances;
+            }
             
             Log::info('Dashboard stats calculated', [
                 'total_events' => $totalEvents,
@@ -37,9 +56,14 @@ class AdminController extends Controller
                 'total_registrations' => $totalRegistrations,
                 'total_attendances' => $totalAttendances,
                 'total_attendees' => $totalAttendees,
+                'has_checked_in_at' => $hasCheckedInAt,
+                'has_attendance_time' => $hasAttendanceTime,
+                'has_status_column' => $hasStatusColumnAtt,
             ]);
         } catch (\Exception $e) {
-            Log::error('Error calculating dashboard stats: ' . $e->getMessage());
+            Log::error('Error calculating dashboard stats: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
             // Set defaults on error
             $totalEvents = 0;
             $publishedEvents = 0;
@@ -85,9 +109,11 @@ class AdminController extends Controller
             'admin_revenue' => $adminRevenue,
             'panitia_revenue' => $panitiaRevenue,
             'events_this_year' => Event::whereYear('created_at', $year)->count(),
-            'registrations_this_year' => EventRegistration::whereYear('created_at', $year)
-                ->where('status', '!=', 'cancelled')
-                ->count(),
+            'registrations_this_year' => $hasStatusColumn 
+                ? EventRegistration::whereYear('created_at', $year)
+                    ->where('status', '!=', 'cancelled')
+                    ->count()
+                : EventRegistration::whereYear('created_at', $year)->count(),
         ];
 
         // Recent events - remove creator eager loading (admins table doesn't exist)
@@ -118,10 +144,22 @@ class AdminController extends Controller
         }
 
         // Monthly attendees data (for chart)
-        $monthlyAttendees = Attendance::selectRaw('MONTH(checked_in_at) as month, COUNT(*) as count')
-            ->whereYear('checked_in_at', $year)
-            ->where('status', 'present')
-            ->groupBy('month')
+        // Check which column exists for attendance date
+        $hasCheckedInAt = Schema::hasColumn('attendances', 'checked_in_at');
+        $hasAttendanceTime = Schema::hasColumn('attendances', 'attendance_time');
+        $hasStatusColumnAtt = Schema::hasColumn('attendances', 'status');
+        
+        $dateColumn = $hasCheckedInAt ? 'checked_in_at' : ($hasAttendanceTime ? 'attendance_time' : 'created_at');
+        
+        $monthlyAttendeesQuery = Attendance::selectRaw("MONTH({$dateColumn}) as month, COUNT(*) as count")
+            ->whereYear($dateColumn, $year);
+        
+        // Only filter by status if column exists
+        if ($hasStatusColumnAtt) {
+            $monthlyAttendeesQuery->where('status', 'present');
+        }
+        
+        $monthlyAttendees = $monthlyAttendeesQuery->groupBy('month')
             ->get()
             ->keyBy('month');
 
@@ -134,14 +172,24 @@ class AdminController extends Controller
         }
 
         // Top events (by registration count)
+        // Check if status column exists in registrations table
+        $hasStatusColumnReg = Schema::hasColumn('registrations', 'status');
+        
         // Use subquery to count non-cancelled registrations per event
-        $topEvents = Event::select('events.*')
-            ->withCount([
+        $topEventsQuery = Event::select('events.*');
+        
+        if ($hasStatusColumnReg) {
+            $topEventsQuery->withCount([
                 'registrations' => function($query) {
                     $query->where('status', '!=', 'cancelled');
                 }
-            ])
-            ->orderBy('registrations_count', 'desc')
+            ]);
+        } else {
+            // If no status column, count all registrations
+            $topEventsQuery->withCount('registrations');
+        }
+        
+        $topEvents = $topEventsQuery->orderBy('registrations_count', 'desc')
             ->take(10)
             ->get()
             ->map(function($event) {
@@ -414,11 +462,22 @@ class AdminController extends Controller
      */
     public function participantsStatistics(Request $request)
     {
+        $hasStatusColumnReg = Schema::hasColumn('registrations', 'status');
+        $hasStatusColumnAtt = Schema::hasColumn('attendances', 'status');
+        
         $total = EventRegistration::count();
-        $confirmed = EventRegistration::where('status', 'confirmed')->orWhere('status', 'registered')->count();
-        $pending = EventRegistration::where('status', 'pending')->count();
-        $attended = Attendance::where('status', 'present')->count();
-        $cancelled = EventRegistration::where('status', 'cancelled')->count();
+        $confirmed = $hasStatusColumnReg 
+            ? EventRegistration::where('status', 'confirmed')->orWhere('status', 'registered')->count()
+            : $total; // If no status column, all are considered confirmed
+        $pending = $hasStatusColumnReg 
+            ? EventRegistration::where('status', 'pending')->count()
+            : 0;
+        $attended = $hasStatusColumnAtt 
+            ? Attendance::where('status', 'present')->count()
+            : Attendance::count(); // If no status column, all are considered attended
+        $cancelled = $hasStatusColumnReg 
+            ? EventRegistration::where('status', 'cancelled')->count()
+            : 0;
 
         return response()->json([
             'success' => true,
