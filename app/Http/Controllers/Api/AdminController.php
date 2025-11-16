@@ -21,14 +21,49 @@ class AdminController extends Controller
     {
         $year = $request->get('year', date('Y'));
 
+        // Calculate stats
+        $totalEvents = Event::count();
+        $publishedEvents = Event::where('is_published', true)->count();
+        $totalRegistrations = EventRegistration::where('status', '!=', 'cancelled')->count();
+        $totalAttendances = Attendance::count();
+        $totalAttendees = Attendance::where('status', 'present')->count();
+        
+        // Calculate attendance rate
+        $attendanceRate = 0;
+        if ($totalRegistrations > 0) {
+            $attendanceRate = round(($totalAttendees / $totalRegistrations) * 100, 1);
+        }
+
+        // Calculate revenue (from payments table)
+        $totalRevenue = 0;
+        $adminRevenue = 0;
+        $panitiaRevenue = 0;
+        
+        if (Schema::hasTable('payments')) {
+            try {
+                $totalRevenue = \App\Models\Payment::where('status', 'paid')
+                    ->sum('amount') ?? 0;
+                // For now, split 70% admin, 30% panitia (can be configured later)
+                $adminRevenue = $totalRevenue * 0.7;
+                $panitiaRevenue = $totalRevenue * 0.3;
+            } catch (\Exception $e) {
+                Log::warning('Error calculating revenue: ' . $e->getMessage());
+            }
+        }
+
         $stats = [
-            'total_events' => Event::count(),
-            'published_events' => Event::where('is_published', true)->count(),
-            'total_registrations' => EventRegistration::where('status', '!=', 'cancelled')->count(),
+            'total_events' => $totalEvents,
+            'published_events' => $publishedEvents,
+            'total_registrations' => $totalRegistrations,
             'total_users' => Schema::hasColumn('users', 'is_verified') 
                 ? User::where('is_verified', true)->count()
                 : User::whereNotNull('email_verified_at')->count(),
-            'total_attendances' => Attendance::count(),
+            'total_attendances' => $totalAttendances,
+            'total_attendees' => $totalAttendees, // For frontend compatibility
+            'attendance_rate' => $attendanceRate,
+            'total_revenue' => $totalRevenue,
+            'admin_revenue' => $adminRevenue,
+            'panitia_revenue' => $panitiaRevenue,
             'events_this_year' => Event::whereYear('created_at', $year)->count(),
             'registrations_this_year' => EventRegistration::whereYear('created_at', $year)
                 ->where('status', '!=', 'cancelled')
@@ -47,11 +82,59 @@ class AdminController extends Controller
             ->take(5)
             ->get();
 
+        // Monthly events data (for chart)
+        $monthlyEvents = Event::selectRaw('MONTH(created_at) as month, COUNT(*) as count')
+            ->whereYear('created_at', $year)
+            ->groupBy('month')
+            ->get()
+            ->keyBy('month');
+
+        $monthlyEventsData = [];
+        for ($i = 1; $i <= 12; $i++) {
+            $monthlyEventsData[] = [
+                'month' => $i,
+                'count' => $monthlyEvents->get($i)->count ?? 0,
+            ];
+        }
+
+        // Monthly attendees data (for chart)
+        $monthlyAttendees = Attendance::selectRaw('MONTH(checked_in_at) as month, COUNT(*) as count')
+            ->whereYear('checked_in_at', $year)
+            ->where('status', 'present')
+            ->groupBy('month')
+            ->get()
+            ->keyBy('month');
+
+        $monthlyAttendeesData = [];
+        for ($i = 1; $i <= 12; $i++) {
+            $monthlyAttendeesData[] = [
+                'month' => $i,
+                'count' => $monthlyAttendees->get($i)->count ?? 0,
+            ];
+        }
+
+        // Top events (by registration count)
+        $topEvents = Event::select('events.*', DB::raw('COUNT(registrations.id) as registration_count'))
+            ->leftJoin('registrations', 'events.id', '=', 'registrations.event_id')
+            ->where(function($query) {
+                $query->where('registrations.status', '!=', 'cancelled')
+                      ->orWhereNull('registrations.status');
+            })
+            ->orWhereNull('registrations.id')
+            ->groupBy('events.id')
+            ->orderBy('registration_count', 'desc')
+            ->take(10)
+            ->get();
+
         return response()->json([
             'success' => true,
-            'stats' => $stats,
+            'statistics' => $stats, // Changed from 'stats' to 'statistics' for frontend compatibility
+            'stats' => $stats, // Keep for backward compatibility
             'recent_events' => $recentEvents,
             'upcoming_events' => $upcomingEvents,
+            'monthly_events' => $monthlyEventsData,
+            'monthly_attendees' => $monthlyAttendeesData,
+            'top_events' => $topEvents,
         ]);
     }
 
