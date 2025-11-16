@@ -577,11 +577,102 @@ class EventController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
+        // If registration doesn't exist, create it automatically for paid events
         if (!$registration) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Anda belum terdaftar untuk event ini.',
-            ], 400);
+            try {
+                // Generate 10-digit attendance token
+                $attendanceToken = strtoupper(substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'), 0, 10));
+                
+                // Prepare registration data based on table schema
+                $registrationData = [
+                    'event_id' => $id,
+                    'user_id' => $user->id,
+                    'attendance_token' => $attendanceToken,
+                ];
+                
+                // Check which columns exist in the registrations table
+                $hasNameColumn = Schema::hasColumn('registrations', 'name');
+                $hasEmailColumn = Schema::hasColumn('registrations', 'email');
+                $hasPhoneColumn = Schema::hasColumn('registrations', 'phone');
+                $hasTokenHashColumn = Schema::hasColumn('registrations', 'token_hash');
+                $hasTokenPlainColumn = Schema::hasColumn('registrations', 'token_plain');
+                $hasTokenSentAtColumn = Schema::hasColumn('registrations', 'token_sent_at');
+                $hasMotivationColumn = Schema::hasColumn('registrations', 'motivation');
+                $hasAdditionalInfoColumn = Schema::hasColumn('registrations', 'additional_info');
+                $hasRegisteredAtColumn = Schema::hasColumn('registrations', 'registered_at');
+                $hasConfirmedAtColumn = Schema::hasColumn('registrations', 'confirmed_at');
+                
+                // Set name, email, phone if columns exist (required by old schema - these are NOT NULL)
+                if ($hasNameColumn) {
+                    $registrationData['name'] = $user->name ?? '';
+                }
+                if ($hasEmailColumn) {
+                    $registrationData['email'] = $user->email ?? '';
+                }
+                if ($hasPhoneColumn) {
+                    // Phone is NOT NULL in old schema, so provide default value
+                    $registrationData['phone'] = !empty($user->phone) ? $user->phone : '-';
+                }
+                
+                // Set token_hash and token_plain if columns exist (required by old schema)
+                if ($hasTokenHashColumn) {
+                    $registrationData['token_hash'] = Hash::make($attendanceToken);
+                }
+                if ($hasTokenPlainColumn) {
+                    $registrationData['token_plain'] = $attendanceToken;
+                }
+                if ($hasTokenSentAtColumn) {
+                    $registrationData['token_sent_at'] = now();
+                }
+                
+                // Set motivation/additional_info if column exists
+                if ($hasMotivationColumn) {
+                    $registrationData['motivation'] = null;
+                } elseif ($hasAdditionalInfoColumn) {
+                    $registrationData['additional_info'] = null;
+                }
+                
+                // Map status: Railway DB uses enum('registered','cancelled'), new schema uses enum('pending','confirmed','cancelled','completed')
+                // Always use 'registered' for Railway DB compatibility (it's in the enum)
+                // If status column doesn't exist or uses new enum, try 'confirmed' or 'pending'
+                $hasStatusColumn = Schema::hasColumn('registrations', 'status');
+                if ($hasStatusColumn) {
+                    // Try to use 'registered' first (old schema), fallback to new schema values
+                    // Railway DB uses 'registered'/'cancelled' enum
+                    $registrationData['status'] = 'registered'; // Works for Railway DB
+                } else {
+                    // Status column doesn't exist (unlikely but handle it)
+                    $registrationData['status'] = 'pending';
+                }
+                
+                // Set registered_at and confirmed_at if columns exist (new schema)
+                if ($hasRegisteredAtColumn) {
+                    $registrationData['registered_at'] = now();
+                }
+                if ($hasConfirmedAtColumn) {
+                    // For paid events, confirmed_at will be set after payment
+                    $registrationData['confirmed_at'] = null;
+                }
+                
+                $registration = EventRegistration::create($registrationData);
+                
+                Log::info('Auto-created registration for paid event payment', [
+                    'event_id' => $id,
+                    'user_id' => $user->id,
+                    'registration_id' => $registration->id,
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Error auto-creating registration for payment', [
+                    'error' => $e->getMessage(),
+                    'event_id' => $id,
+                    'user_id' => $user->id,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal membuat registrasi. Silakan coba lagi.',
+                    'error' => config('app.debug') ? $e->getMessage() : null,
+                ], 500);
+            }
         }
 
         // Check which columns exist in payments table
