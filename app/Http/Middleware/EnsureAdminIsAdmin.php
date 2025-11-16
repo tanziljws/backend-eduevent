@@ -15,18 +15,42 @@ class EnsureAdminIsAdmin
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $user = $request->user('sanctum');
+        $user = null;
+        $admin = null;
 
-        // Check if user is authenticated
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized.',
-            ], 401);
+        // First, check if using Sanctum token (API request)
+        if ($request->bearerToken()) {
+            $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+            
+            if ($token) {
+                // Check if token belongs to Admin model
+                if ($token->tokenable_type === \App\Models\Admin::class) {
+                    $admin = $token->tokenable;
+                } else {
+                    // Token exists but belongs to User, not Admin
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Forbidden. Admin access required.',
+                    ], 403);
+                }
+            }
         }
 
-        // Check if user is admin (check if user is instance of Admin model)
-        if (!($user instanceof \App\Models\Admin)) {
+        // If no admin from Sanctum token, try Sanctum's user method
+        if (!$admin) {
+            $user = $request->user('sanctum');
+            if ($user instanceof \App\Models\Admin) {
+                $admin = $user;
+            }
+        }
+
+        // If still no admin, try session-based admin guard
+        if (!$admin) {
+            $admin = auth('admin')->user();
+        }
+
+        // Check if admin is authenticated
+        if (!$admin || !($admin instanceof \App\Models\Admin)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Forbidden. Admin access required.',
