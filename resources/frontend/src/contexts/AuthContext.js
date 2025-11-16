@@ -22,21 +22,22 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
+    // Try admin login first (more specific - admin should use admin endpoint)
     try {
-      const response = await authService.login(email, password);
-      setUser(response.user);
-      return { success: true };
-    } catch (error) {
-      // If user login fails, try admin login
+      const adminResponse = await authService.loginAdmin(email, password);
+      setUser(adminResponse.user);
+      return { success: true, isAdmin: true };
+    } catch (adminError) {
+      // If admin login fails, try user login
       try {
-        const adminResponse = await authService.loginAdmin(email, password);
-        setUser(adminResponse.user);
-        return { success: true, isAdmin: true };
-      } catch (adminError) {
-        // Both failed, return user error
+        const response = await authService.login(email, password);
+        setUser(response.user);
+        return { success: true, isAdmin: false };
+      } catch (error) {
+        // Both failed, return admin error (more specific)
         return { 
           success: false, 
-          error: error.response?.data?.message || adminError.response?.data?.message || 'Login gagal' 
+          error: adminError.response?.data?.message || error.response?.data?.message || 'Login gagal' 
         };
       }
     }
