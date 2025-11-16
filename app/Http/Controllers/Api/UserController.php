@@ -10,6 +10,8 @@ use App\Models\Event;
 use App\Models\Attendance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class UserController extends Controller
@@ -20,11 +22,31 @@ class UserController extends Controller
     public function eventHistory(Request $request)
     {
         try {
-            $user = $request->user();
-            $registrations = EventRegistration::where('user_id', $user->id)
-                ->with(['event', 'attendance', 'certificate', 'payment'])
-                ->latest('registered_at')
-                ->get();
+        $user = $request->user();
+            
+            // Build query - check if registered_at column exists
+            $query = EventRegistration::where('user_id', $user->id);
+            
+            // Check which columns exist for ordering
+            $hasRegisteredAtColumn = Schema::hasColumn('registrations', 'registered_at');
+            if ($hasRegisteredAtColumn) {
+                $query->latest('registered_at');
+            } else {
+                // Fallback to created_at if registered_at doesn't exist
+                $query->latest('created_at');
+            }
+            
+            // Load relationships safely
+            try {
+                $registrations = $query->with(['event', 'attendance', 'certificate', 'payment'])->get();
+            } catch (\Exception $e) {
+                // If relationships fail, load without them
+                Log::warning('Error loading relationships in eventHistory', [
+                    'error' => $e->getMessage(),
+                    'user_id' => $user->id,
+                ]);
+                $registrations = $query->with(['event'])->get();
+            }
 
             $now = Carbon::now();
             $events = [];
@@ -85,10 +107,27 @@ class UserController extends Controller
                 }
 
                 // Format event data
+                // Get registration date safely
+                $registrationDate = null;
+                try {
+                    if ($hasRegisteredAtColumn && $reg->registered_at) {
+                        $registrationDate = $reg->registered_at instanceof \Carbon\Carbon 
+                            ? $reg->registered_at->toISOString() 
+                            : Carbon::parse($reg->registered_at)->toISOString();
+                    } elseif ($reg->created_at) {
+                        $registrationDate = $reg->created_at instanceof \Carbon\Carbon 
+                            ? $reg->created_at->toISOString() 
+                            : Carbon::parse($reg->created_at)->toISOString();
+                    }
+                } catch (\Exception $e) {
+                    // If date parsing fails, use null
+                    $registrationDate = null;
+                }
+                
                 $eventData = [
                     'registration_id' => $reg->id,
-                    'registration_date' => $reg->registered_at?->toISOString(),
-                    'token_plain' => $reg->attendance_token, // Use attendance_token from registration
+                    'registration_date' => $registrationDate,
+                    'token_plain' => $reg->attendance_token ?? null, // Use attendance_token from registration
                     'overall_status' => $overallStatus,
                     'event' => [
                         'id' => $reg->event->id,
@@ -118,13 +157,26 @@ class UserController extends Controller
                         'flyer_url' => $reg->event->flyer_url,
                     ],
                     'attendance' => $reg->attendance ? [
-                        'id' => $reg->attendance->id,
-                        'is_present' => $reg->attendance->status === 'present',
-                        'status' => $reg->attendance->status,
-                        'token_used' => $reg->attendance->check_in_token,
-                        'checked_in_at' => $reg->attendance->checked_in_at?->toISOString(),
+                        'id' => $reg->attendance->id ?? null,
+                        'is_present' => ($reg->attendance->status ?? null) === 'present',
+                        'status' => $reg->attendance->status ?? null,
+                        'token_used' => $reg->attendance->check_in_token ?? null,
+                        'checked_in_at' => $reg->attendance->checked_in_at 
+                            ? (($reg->attendance->checked_in_at instanceof \Carbon\Carbon) 
+                                ? $reg->attendance->checked_in_at->toISOString() 
+                                : Carbon::parse($reg->attendance->checked_in_at)->toISOString())
+                            : null,
                         'formatted_attendance_time' => $reg->attendance->checked_in_at 
-                            ? Carbon::parse($reg->attendance->checked_in_at)->locale('id')->translatedFormat('d F Y, H:i')
+                            ? (function() use ($reg) {
+                                try {
+                                    $checkedInAt = $reg->attendance->checked_in_at instanceof \Carbon\Carbon 
+                                        ? $reg->attendance->checked_in_at 
+                                        : Carbon::parse($reg->attendance->checked_in_at);
+                                    return $checkedInAt->locale('id')->translatedFormat('d F Y, H:i');
+                                } catch (\Exception $e) {
+                                    return null;
+                                }
+                            })()
                             : null,
                     ] : [
                         'id' => null,
@@ -135,12 +187,16 @@ class UserController extends Controller
                         'formatted_attendance_time' => null,
                     ],
                     'certificate' => $reg->certificate ? [
-                        'id' => $reg->certificate->id,
-                        'available' => $reg->certificate->status === 'issued' && $reg->certificate->certificate_path !== null,
-                        'status' => $reg->certificate->status,
-                        'certificate_number' => $reg->certificate->certificate_number,
-                        'certificate_url' => $reg->certificate->certificate_url,
-                        'issued_at' => $reg->certificate->issued_at?->toISOString(),
+                        'id' => $reg->certificate->id ?? null,
+                        'available' => ($reg->certificate->status ?? null) === 'issued' && ($reg->certificate->certificate_path ?? null) !== null,
+                        'status' => $reg->certificate->status ?? null,
+                        'certificate_number' => $reg->certificate->certificate_number ?? null,
+                        'certificate_url' => $reg->certificate->certificate_url ?? null,
+                        'issued_at' => $reg->certificate->issued_at 
+                            ? (($reg->certificate->issued_at instanceof \Carbon\Carbon) 
+                                ? $reg->certificate->issued_at->toISOString() 
+                                : Carbon::parse($reg->certificate->issued_at)->toISOString())
+                            : null,
                     ] : [
                         'id' => null,
                         'available' => false,
@@ -150,15 +206,15 @@ class UserController extends Controller
                         'issued_at' => null,
                     ],
                     'payment' => $reg->payment ? [
-                        'id' => $reg->payment->id,
-                        'status' => $reg->payment->status,
-                        'amount' => $reg->payment->amount,
+                        'id' => $reg->payment->id ?? null,
+                        'status' => $reg->payment->status ?? 'pending',
+                        'amount' => (float) ($reg->payment->amount ?? 0),
                     ] : null,
                     'registration' => [
                         'id' => $reg->id,
-                        'status' => $reg->status,
-                        'token_plain' => $reg->attendance_token,
-                        'registered_at' => $reg->registered_at?->toISOString(),
+                        'status' => $reg->status ?? 'registered',
+                        'token_plain' => $reg->attendance_token ?? null,
+                        'registered_at' => $registrationDate,
                     ],
                 ];
 
