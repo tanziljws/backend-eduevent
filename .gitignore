@@ -27,3 +27,4 @@ Homestead.yaml
 Thumbs.db
 # Frontend is in separate repository
 /frontend-react.js
+.env.backup.*
