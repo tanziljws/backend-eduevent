@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class AdminController extends Controller
 {
@@ -24,7 +25,9 @@ class AdminController extends Controller
             'total_events' => Event::count(),
             'published_events' => Event::where('is_published', true)->count(),
             'total_registrations' => EventRegistration::where('status', '!=', 'cancelled')->count(),
-            'total_users' => User::where('is_verified', true)->count(),
+            'total_users' => Schema::hasColumn('users', 'is_verified') 
+                ? User::where('is_verified', true)->count()
+                : User::whereNotNull('email_verified_at')->count(),
             'total_attendances' => Attendance::count(),
             'events_this_year' => Event::whereYear('created_at', $year)->count(),
             'registrations_this_year' => EventRegistration::whereYear('created_at', $year)

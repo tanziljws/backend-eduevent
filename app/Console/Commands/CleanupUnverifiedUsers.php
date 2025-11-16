@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 
 class CleanupUnverifiedUsers extends Command
@@ -35,10 +36,20 @@ class CleanupUnverifiedUsers extends Command
         
         // Find unverified users with expired OTP
         $cutoffTime = Carbon::now()->subHours($hours);
+        $hasIsVerifiedColumn = Schema::hasColumn('users', 'is_verified');
         
-        $query = User::where('is_verified', false)
-            ->where(function($q) use ($cutoffTime) {
-                // OTP expired and past grace period
+        $query = User::query();
+        
+        // Only filter by is_verified if column exists, otherwise use email_verified_at
+        if ($hasIsVerifiedColumn) {
+            $query->where('is_verified', false);
+        } else {
+            $query->whereNull('email_verified_at');
+        }
+        
+        $query->where(function($q) use ($cutoffTime) {
+            // OTP expired and past grace period
+            if (Schema::hasColumn('users', 'otp_expires_at')) {
                 $q->where(function($subQ) use ($cutoffTime) {
                     $subQ->whereNotNull('otp_expires_at')
                          ->where('otp_expires_at', '<', $cutoffTime);
@@ -48,7 +59,11 @@ class CleanupUnverifiedUsers extends Command
                     $subQ->whereNull('otp_expires_at')
                          ->where('created_at', '<', $cutoffTime);
                 });
-            });
+            } else {
+                // If otp_expires_at column doesn't exist, just check created_at
+                $q->where('created_at', '<', $cutoffTime);
+            }
+        });
         
         $count = $query->count();
         

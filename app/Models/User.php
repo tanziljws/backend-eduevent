@@ -6,6 +6,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -47,12 +48,20 @@ class User extends Authenticatable
      */
     protected function casts(): array
     {
-        return [
+        $casts = [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'otp_expires_at' => 'datetime',
-            'is_verified' => 'boolean',
         ];
+        
+        // Only add OTP and is_verified casts if columns exist
+        if (\Schema::hasColumn($this->getTable(), 'otp_expires_at')) {
+            $casts['otp_expires_at'] = 'datetime';
+        }
+        if (\Schema::hasColumn($this->getTable(), 'is_verified')) {
+            $casts['is_verified'] = 'boolean';
+        }
+        
+        return $casts;
     }
 
     // Relationships

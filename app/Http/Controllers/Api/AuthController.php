@@ -8,6 +8,7 @@ use App\Models\Admin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use App\Services\BrevoMailService;
 use Carbon\Carbon;
 
@@ -21,9 +22,21 @@ class AuthController extends Controller
         $email = strtolower(trim($request->email));
         
         // Cleanup unverified users with the same email BEFORE validation (zombie database cleanup)
-        $existingUnverifiedUser = User::where('email', $email)
-            ->where('is_verified', false)
-            ->first();
+        // Check if is_verified column exists before querying
+        $hasIsVerifiedColumn = Schema::hasColumn('users', 'is_verified');
+        
+        $existingUnverifiedUser = User::where('email', $email);
+        
+        // Only filter by is_verified if column exists
+        if ($hasIsVerifiedColumn) {
+            $existingUnverifiedUser = $existingUnverifiedUser->where('is_verified', false);
+        } else {
+            // If column doesn't exist, only check for email_verified_at being null
+            // This handles old database schema without is_verified
+            $existingUnverifiedUser = $existingUnverifiedUser->whereNull('email_verified_at');
+        }
+        
+        $existingUnverifiedUser = $existingUnverifiedUser->first();
         
         if ($existingUnverifiedUser) {
             // Delete unverified user to allow re-registration
@@ -56,19 +69,31 @@ class AuthController extends Controller
                 ? trim($request->username) 
                 : $this->generateUsernameFromEmail($email);
 
-            $user = User::create([
+            // Prepare user data
+            $userData = [
                 'name' => trim($request->name),
                 'username' => $username,
                 'email' => $email,
                 'phone' => $request->phone ? trim($request->phone) : null,
                 'password' => $request->password,
-                'is_verified' => false,
-            ]);
+            ];
+            
+            // Only add is_verified if column exists
+            if (Schema::hasColumn('users', 'is_verified')) {
+                $userData['is_verified'] = false;
+            }
+            
+            $user = User::create($userData);
 
-            // Generate OTP
+            // Generate OTP (only if columns exist)
             $otp = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-            $user->otp_code = $otp;
-            $user->otp_expires_at = Carbon::now()->addMinutes(10);
+            
+            if (Schema::hasColumn('users', 'otp_code')) {
+                $user->otp_code = $otp;
+            }
+            if (Schema::hasColumn('users', 'otp_expires_at')) {
+                $user->otp_expires_at = Carbon::now()->addMinutes(10);
+            }
             $user->save();
 
             // Send OTP email
@@ -148,12 +173,18 @@ class AuthController extends Controller
         }
 
         // Verify user
-        $user->is_verified = true;
+        if (Schema::hasColumn('users', 'is_verified')) {
+            $user->is_verified = true;
+        }
         if (!$user->email_verified_at) {
             $user->email_verified_at = Carbon::now();
         }
-        $user->otp_code = null;
-        $user->otp_expires_at = null;
+        if (Schema::hasColumn('users', 'otp_code')) {
+            $user->otp_code = null;
+        }
+        if (Schema::hasColumn('users', 'otp_expires_at')) {
+            $user->otp_expires_at = null;
+        }
         $user->save();
 
         // Create token
@@ -187,7 +218,13 @@ class AuthController extends Controller
             ], 401);
         }
 
-        if (!$user->is_verified) {
+        // Check verification status - handle both is_verified column and email_verified_at
+        $hasIsVerifiedColumn = Schema::hasColumn('users', 'is_verified');
+        $isVerified = $hasIsVerifiedColumn 
+            ? $user->is_verified 
+            : !is_null($user->email_verified_at);
+
+        if (!$isVerified) {
             return response()->json([
                 'success' => false,
                 'message' => 'Email belum diverifikasi. Silakan verifikasi email terlebih dahulu.',
@@ -225,10 +262,15 @@ class AuthController extends Controller
             ]);
         }
 
-        // Generate OTP
+        // Generate OTP (only if columns exist)
         $otp = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $user->otp_code = $otp;
-        $user->otp_expires_at = Carbon::now()->addMinutes(10);
+        
+        if (Schema::hasColumn('users', 'otp_code')) {
+            $user->otp_code = $otp;
+        }
+        if (Schema::hasColumn('users', 'otp_expires_at')) {
+            $user->otp_expires_at = Carbon::now()->addMinutes(10);
+        }
         $user->save();
 
         // Send OTP email
@@ -280,24 +322,34 @@ class AuthController extends Controller
 
         $user = User::findOrFail($request->user_id);
 
-        if (!$user->otp_code || !$user->otp_expires_at || Carbon::now()->greaterThan($user->otp_expires_at)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'OTP kedaluwarsa. Silakan kirim ulang.',
-            ], 400);
-        }
+        // Check if OTP columns exist
+        $hasOtpColumns = Schema::hasColumn('users', 'otp_code') && Schema::hasColumn('users', 'otp_expires_at');
+        
+        if ($hasOtpColumns) {
+            if (!$user->otp_code || !$user->otp_expires_at || Carbon::now()->greaterThan($user->otp_expires_at)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'OTP kedaluwarsa. Silakan kirim ulang.',
+                ], 400);
+            }
 
-        if ($request->code !== $user->otp_code) {
-            return response()->json([
-                'success' => false,
-                'message' => 'OTP tidak valid.',
-            ], 400);
+            if ($request->code !== $user->otp_code) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'OTP tidak valid.',
+                ], 400);
+            }
         }
+        // If OTP columns don't exist, skip validation (old schema support)
 
         // Reset password
         $user->password = $request->password;
-        $user->otp_code = null;
-        $user->otp_expires_at = null;
+        if (Schema::hasColumn('users', 'otp_code')) {
+            $user->otp_code = null;
+        }
+        if (Schema::hasColumn('users', 'otp_expires_at')) {
+            $user->otp_expires_at = null;
+        }
         $user->save();
 
         return response()->json([
