@@ -8,7 +8,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class EventRegistration extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
+    // Removed SoftDeletes - check if table has deleted_at column before enabling
+    
+    // Specify table name if different from model name
+    protected $table = 'registrations';
 
     protected $fillable = [
         'event_id',

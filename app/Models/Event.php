@@ -120,7 +120,18 @@ class Event extends Model
     // Helper methods
     public function getRegisteredCountAttribute()
     {
-        return $this->registrations()->where('status', '!=', 'cancelled')->count();
+        try {
+            // Table name is 'registrations' not 'event_registrations' in Railway DB
+            // Check if registrations table exists
+            if (!\Schema::hasTable('registrations')) {
+                return 0; // Return 0 if table doesn't exist
+            }
+            return $this->registrations()->where('status', '!=', 'cancelled')->count();
+        } catch (\Exception $e) {
+            // Gracefully handle any errors (table doesn't exist, connection issues, etc.)
+            \Log::warning('Error getting registered count for event ' . $this->id . ': ' . $e->getMessage());
+            return 0;
+        }
     }
 
     public function isFull()
