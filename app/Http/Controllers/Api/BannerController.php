@@ -18,16 +18,10 @@ class BannerController extends Controller
         $query = Banner::query();
         
         // If not admin, only return active banners
+        // Note: banners table doesn't have start_date and end_date columns in Railway DB
         if (!$request->user() || !($request->user() instanceof \App\Models\Admin)) {
-            $query->where('is_active', true)
-                ->where(function($q) {
-                    $q->whereNull('start_date')
-                        ->orWhere('start_date', '<=', now());
-                })
-                ->where(function($q) {
-                    $q->whereNull('end_date')
-                        ->orWhere('end_date', '>=', now());
-                });
+            $query->where('is_active', true);
+            // Removed start_date and end_date filters - columns don't exist in database
         }
         
         $banners = $query->orderBy('order', 'asc')->get();
