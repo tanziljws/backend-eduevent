@@ -7,10 +7,12 @@ use App\Models\Event;
 use App\Models\EventRegistration;
 use App\Models\Attendance;
 use App\Models\User;
+use App\Models\Payment;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 
 class AdminController extends Controller
 {
