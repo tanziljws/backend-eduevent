@@ -30,6 +30,8 @@ function EventRegistration() {
 
   useEffect(() => {
     fetchEvent();
+    // Clear error when event changes
+    setError(null);
   }, [id]);
 
   useEffect(() => {
@@ -42,6 +44,13 @@ function EventRegistration() {
       }));
     }
   }, [user]);
+
+  useEffect(() => {
+    // Clear error when event changes
+    if (event) {
+      setError(null);
+    }
+  }, [event]);
 
   // Load Midtrans Snap for paid events
   useEffect(() => {
@@ -59,13 +68,21 @@ function EventRegistration() {
     const clientKey = process.env.REACT_APP_MIDTRANS_CLIENT_KEY;
     if (!clientKey) {
       // No client key - allow direct registration without payment gateway
+      // Don't show error yet - let backend handle it when payment is attempted
       console.warn('Midtrans client key not configured. Payment gateway will be skipped.');
       setSnapLoaded(true); // Set to true so button is enabled
       return;
     }
     
+    // Determine if production or sandbox based on client key prefix
+    // Production keys start with "Mid-client-", sandbox keys start with "SB-Mid-client-"
+    const isProduction = clientKey && !clientKey.startsWith('SB-');
+    const snapUrl = isProduction 
+      ? 'https://app.midtrans.com/snap/snap.js'
+      : 'https://app.sandbox.midtrans.com/snap/snap.js';
+    
     const script = document.createElement('script');
-    script.src = 'https://app.sandbox.midtrans.com/snap/snap.js';
+    script.src = snapUrl;
     script.setAttribute('data-client-key', clientKey);
     
     // Set timeout for script loading (10 seconds)
@@ -136,58 +153,21 @@ function EventRegistration() {
       setIsPaying(true);
       setError(null);
       
-      // Step 1: Ensure Midtrans Snap script is loaded FIRST
-      const clientKey = process.env.REACT_APP_MIDTRANS_CLIENT_KEY;
-      
-      if (!clientKey) {
-        // No client key - cannot proceed with payment gateway
-        setError('Payment gateway belum dikonfigurasi. Silakan hubungi admin atau refresh halaman.');
-        setIsPaying(false);
-        return;
-      }
-      
-      // Wait for snap to be available (if not loaded yet)
-      let snapCheckCount = 0;
-      const maxSnapChecks = 50; // 50 checks = ~5 seconds (increase wait time significantly)
-      
-      console.log('Waiting for Midtrans Snap to load...');
-      while (!window.snap && snapCheckCount < maxSnapChecks) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        snapCheckCount++;
-        
-        // Check if script element exists
-        const snapScript = document.querySelector('script[src*="midtrans.com/snap"]');
-        if (snapScript && !window.snap) {
-          console.log('Script loaded but snap not available yet...', snapCheckCount);
-        }
-      }
-      
-      if (!window.snap) {
-        // Snap still not loaded after waiting - force reload or show error
-        console.error('Midtrans Snap failed to load after', maxSnapChecks * 100, 'ms');
-        setError('Payment gateway belum siap. Silakan refresh halaman dan coba lagi.');
-        setIsPaying(false);
-        return;
-      }
-      
-      console.log('Midtrans Snap is ready!');
-      
-      // Step 2: Create registration and payment (this will auto-create registration if needed)
+      // Step 1: Create registration and payment first (backend will handle Midtrans token generation)
       console.log('Creating payment...');
       const res = await eventService.createPayment(event.id);
       const token = res?.snap_token;
       
       console.log('Payment created:', { 
         hasToken: !!token, 
-        tokenPrefix: token ? token.substring(0, 30) + '...' : 'null',
-        hasSnap: !!window.snap 
+        tokenPrefix: token ? token.substring(0, 30) + '...' : 'null'
       });
       
-      // Step 3: WAJIB buka payment gateway - TIDAK BOLEH SKIP!
+      // Step 2: Check if backend returned a valid token
       if (!token || !token.trim()) {
-        // No token from backend - Midtrans may not be configured
+        // No token from backend - Midtrans may not be configured on backend
         console.error('No snap_token received from backend');
-        setError('Gagal mendapatkan token pembayaran. Pastikan MIDTRANS_SERVER_KEY sudah dikonfigurasi di server. Silakan hubungi admin.');
+        setError('Payment gateway belum dikonfigurasi. Pastikan MIDTRANS_SERVER_KEY sudah dikonfigurasi di server. Silakan hubungi admin.');
         setIsPaying(false);
         return;
       }
@@ -200,15 +180,53 @@ function EventRegistration() {
         return;
       }
       
-      // Double check window.snap is still available
+      // Step 3: Load Midtrans Snap script if not already loaded
+      const clientKey = process.env.REACT_APP_MIDTRANS_CLIENT_KEY;
+      
+      // If client key exists, ensure snap script is loaded
+      if (clientKey && !window.snap) {
+        // Determine if production or sandbox
+        const isProduction = !clientKey.startsWith('SB-');
+        const snapUrl = isProduction 
+          ? 'https://app.midtrans.com/snap/snap.js'
+          : 'https://app.sandbox.midtrans.com/snap/snap.js';
+        
+        // Load script dynamically
+        const script = document.createElement('script');
+        script.src = snapUrl;
+        script.setAttribute('data-client-key', clientKey);
+        
+        // Wait for script to load
+        await new Promise((resolve, reject) => {
+          script.onload = () => {
+            // Wait a bit more for window.snap to be available
+            let checkCount = 0;
+            const checkInterval = setInterval(() => {
+              if (window.snap || checkCount > 20) {
+                clearInterval(checkInterval);
+                resolve();
+              }
+              checkCount++;
+            }, 100);
+          };
+          script.onerror = () => {
+            console.warn('Failed to load Midtrans Snap script, but continuing anyway...');
+            resolve(); // Continue anyway - backend token is valid
+          };
+          document.body.appendChild(script);
+        });
+      }
+      
+      // Step 4: Open payment gateway
       if (!window.snap || typeof window.snap.pay !== 'function') {
+        // If snap is not available but we have a token, show helpful error
         console.error('window.snap.pay is not available');
-        setError('Payment gateway belum siap. Silakan refresh halaman dan coba lagi.');
+        setError('Payment gateway belum siap. Silakan refresh halaman dan coba lagi. Pastikan REACT_APP_MIDTRANS_CLIENT_KEY sudah dikonfigurasi.');
         setIsPaying(false);
         return;
       }
       
-      // WAJIB: Buka payment gateway Midtrans - INI TIDAK BOLEH DI-SKIP!
+      // WAJIB: Buka payment gateway Midtrans
       console.log('Opening Midtrans payment gateway NOW...');
       
       // Set flag that payment gateway is opening (prevent any redirects)
