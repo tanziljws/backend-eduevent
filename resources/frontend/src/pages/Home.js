@@ -163,20 +163,6 @@ function Home() {
                       <Link to="/events">Lihat Event</Link>
                     </Button>
                   </motion.div>
-                  <motion.div
-                    whileHover={{ scale: 1.05, y: -2 }}
-                    whileTap={{ scale: 0.95 }}
-                    transition={{ duration: 0.2 }}
-                    className="w-full sm:w-auto"
-                  >
-                    <Button
-                      asChild
-                      variant="outline"
-                      className="w-full sm:w-auto border border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-800 px-5 sm:px-6 py-2.5 font-semibold rounded-md text-[14px]"
-                    >
-                      <Link to="/about">Tentang Kami</Link>
-                    </Button>
-                  </motion.div>
                 </motion.div>
               </div>
               
