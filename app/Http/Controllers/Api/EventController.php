@@ -106,7 +106,9 @@ class EventController extends Controller
      */
     public function show($id)
     {
-        $event = Event::with(['creator'])->findOrFail($id);
+        // Remove creator eager loading if admins table doesn't exist
+        // $event = Event::with(['creator'])->findOrFail($id);
+        $event = Event::findOrFail($id);
 
         // Public can only see published events
         if (!$event->is_published && !auth('sanctum')->check()) {

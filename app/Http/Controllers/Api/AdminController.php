@@ -32,9 +32,8 @@ class AdminController extends Controller
                 ->count(),
         ];
 
-        // Recent events
-        $recentEvents = Event::with('creator')
-            ->latest()
+        // Recent events - remove creator eager loading (admins table doesn't exist)
+        $recentEvents = Event::latest()
             ->take(5)
             ->get();
 
