@@ -20,6 +20,7 @@ cmds = [
   "cd resources/frontend && npm run build && cd ../..",
   "php artisan storage:link || true",
   "php artisan migrate --force || true",
+  "php artisan db:seed --class=AdminSeeder || true",
   "php artisan config:cache",
   "php artisan route:cache"
 ]
