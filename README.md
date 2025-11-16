@@ -185,9 +185,11 @@ CORS sudah dikonfigurasi di `config/cors.php` untuk allow origins:
    - `MAIL_FROM_NAME`
    - `APP_URL` (Railway public domain)
    - `FRONTEND_URL` (opsional, untuk CORS)
-   - `REACT_APP_MIDTRANS_CLIENT_KEY` (untuk payment gateway - **penting dengan prefix REACT_APP_**)
+   - `REACT_APP_MIDTRANS_CLIENT_KEY` (untuk payment gateway - **WAJIB dengan prefix REACT_APP_** agar tersedia di React build)
    - `MIDTRANS_SERVER_KEY` (opsional, untuk backend)
    - `MIDTRANS_IS_PRODUCTION=false` (untuk sandbox mode)
+   
+   **Catatan:** Karena ini monorepo, semua environment variable di-set di Railway Variables (satu tempat). Variable dengan prefix `REACT_APP_` akan otomatis tersedia saat React build di Railway.
 
 3. **Build Command untuk Railway (di Settings → Deploy):**
    ```bash

@@ -6,12 +6,16 @@ Midtrans Snap digunakan untuk payment gateway untuk event berbayar. Environment 
 
 ## 🔧 Environment Variables
 
+### **⚠️ Penting: Monorepo Setup**
+
+Karena ini **monorepo** (frontend dan backend sudah disatukan), environment variable untuk React **tidak perlu file .env terpisah**. Semua environment variable di-set di **Railway Variables** atau di **file .env root** (untuk local development).
+
 ### **Untuk Development (Local)**
 
-Buat file `.env` di root project (sama dengan Laravel .env), tambahkan:
+Tambahkan ke file `.env` di **root project** (sama dengan Laravel .env):
 
 ```env
-# Midtrans Configuration (untuk frontend React)
+# Midtrans Configuration (untuk frontend React - prefix REACT_APP_ wajib!)
 REACT_APP_MIDTRANS_CLIENT_KEY=SB-Mid-client-xxxxxxxxxxxx
 
 # Optional: Untuk backend (jika diperlukan)
@@ -19,21 +23,23 @@ MIDTRANS_SERVER_KEY=SB-Mid-server-xxxxxxxxxxxx
 MIDTRANS_IS_PRODUCTION=false
 ```
 
-**Catatan:** Variable dengan prefix `REACT_APP_` akan di-inject ke React build saat `npm run build`.
+**Catatan:** Variable dengan prefix `REACT_APP_` akan otomatis di-inject ke React build saat `npm run build` dijalankan.
 
 ### **Untuk Production (Railway)**
 
-Di Railway Dashboard, set environment variable berikut:
+Karena ini **monorepo**, semua environment variable di-set di **Railway Variables** (satu tempat untuk frontend dan backend).
 
 1. **Buka Railway Dashboard** → Pilih project → **Variables** tab
-2. **Tambah variable:**
-   - Key: `REACT_APP_MIDTRANS_CLIENT_KEY`
+2. **Tambah variable untuk Frontend React:**
+   - Key: `REACT_APP_MIDTRANS_CLIENT_KEY` ⚠️ **Prefix REACT_APP_ wajib!**
    - Value: Client key dari Midtrans dashboard
    - Example: `SB-Mid-client-xxxxxxxxxxxx` (Sandbox) atau `Mid-client-xxxxxxxxxxxx` (Production)
 
 3. **Optional - Backend variables (jika diperlukan):**
    - `MIDTRANS_SERVER_KEY`: Server key dari Midtrans
    - `MIDTRANS_IS_PRODUCTION`: `true` untuk production, `false` untuk sandbox
+
+**Catatan:** Tidak perlu environment variable terpisah untuk frontend. Semua variable di Railway Variables akan tersedia saat build process berjalan.
 
 ## ⚠️ Important Notes
 
