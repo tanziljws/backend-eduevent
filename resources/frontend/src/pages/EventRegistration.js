@@ -136,110 +136,146 @@ function EventRegistration() {
       setIsPaying(true);
       setError(null);
       
-      // Step 1: Check if Midtrans is configured FIRST
+      // Step 1: Ensure Midtrans Snap script is loaded FIRST
       const clientKey = process.env.REACT_APP_MIDTRANS_CLIENT_KEY;
+      
       if (!clientKey) {
-        // No client key configured - create registration but cannot open payment gateway
-        const res = await eventService.createPayment(event.id);
-        setSuccess('Registrasi berhasil dibuat. Pembayaran akan diproses secara manual oleh admin.');
-        setTimeout(() => {
-          navigate(`/events/${id}`);
-        }, 3000);
+        // No client key - cannot proceed with payment gateway
+        setError('Payment gateway belum dikonfigurasi. Silakan hubungi admin atau refresh halaman.');
         setIsPaying(false);
         return;
       }
       
-      // Step 2: Ensure Midtrans Snap script is loaded
       // Wait for snap to be available (if not loaded yet)
       let snapCheckCount = 0;
-      const maxSnapChecks = 30; // 30 checks = ~3 seconds (increase wait time)
+      const maxSnapChecks = 50; // 50 checks = ~5 seconds (increase wait time significantly)
       
+      console.log('Waiting for Midtrans Snap to load...');
       while (!window.snap && snapCheckCount < maxSnapChecks) {
         await new Promise(resolve => setTimeout(resolve, 100));
         snapCheckCount++;
         
-        // If script element exists but window.snap not available, wait a bit more
+        // Check if script element exists
         const snapScript = document.querySelector('script[src*="midtrans.com/snap"]');
         if (snapScript && !window.snap) {
-          console.log('Waiting for Midtrans Snap to initialize...', snapCheckCount);
+          console.log('Script loaded but snap not available yet...', snapCheckCount);
         }
-      }
-      
-      // Step 3: Create registration and payment
-      console.log('Creating payment...', { hasSnap: !!window.snap, clientKey: !!clientKey });
-      const res = await eventService.createPayment(event.id);
-      const token = res?.snap_token;
-      
-      console.log('Payment created:', { hasToken: !!token, token: token?.substring(0, 20) + '...', hasSnap: !!window.snap });
-      
-      // Step 4: WAJIB buka payment gateway - jangan skip!
-      if (!token) {
-        // No token from backend - Midtrans may not be configured or failed
-        console.error('No snap_token received from backend - Midtrans may not be configured');
-        setError('Gagal mendapatkan token pembayaran. Pastikan Midtrans sudah dikonfigurasi di server. Silakan hubungi admin.');
-        setIsPaying(false);
-        return;
-      }
-      
-      // Check if token is mock token (should not happen anymore, but check anyway)
-      if (token.startsWith('mock-snap-token')) {
-        console.error('Mock token detected - Midtrans integration not complete');
-        setError('Payment gateway belum dikonfigurasi dengan benar. Silakan hubungi admin.');
-        setIsPaying(false);
-        return;
       }
       
       if (!window.snap) {
-        // Snap still not loaded after waiting - this is unusual
-        console.error('Midtrans Snap not available after waiting');
-        setError('Payment gateway belum siap. Silakan refresh halaman dan coba lagi. Jika masalah berlanjut, hubungi admin.');
+        // Snap still not loaded after waiting - force reload or show error
+        console.error('Midtrans Snap failed to load after', maxSnapChecks * 100, 'ms');
+        setError('Payment gateway belum siap. Silakan refresh halaman dan coba lagi.');
         setIsPaying(false);
         return;
       }
       
-      // WAJIB: Buka payment gateway Midtrans - jangan skip ini!
-      console.log('Opening Midtrans payment gateway with token:', token.substring(0, 20) + '...');
-      window.snap.pay(token, {
-        onSuccess: function(result) {
-          console.log('Payment success:', result);
-          setSuccess('Pembayaran berhasil! Status registrasi akan diperbarui.');
-          // Redirect to event detail after payment success
-          setTimeout(() => {
-            window.location.href = `/events/${id}`;
-          }, 2000);
-          setIsPaying(false);
-        },
-        onPending: function(result) {
-          console.log('Payment pending:', result);
-          setSuccess('Pembayaran tertunda. Silakan selesaikan pembayaran Anda.');
-          // Redirect to event detail after payment pending
-          setTimeout(() => {
-            window.location.href = `/events/${id}`;
-          }, 2000);
-          setIsPaying(false);
-        },
-        onError: function(result) {
-          console.error('Payment error:', result);
-          setError('Terjadi kesalahan saat memproses pembayaran. Silakan coba lagi.');
-          setIsPaying(false);
-        },
-        onClose: function() {
-          // User closed payment popup without completing payment
-          console.log('Payment popup closed by user');
-          setError('Pembayaran dibatalkan. Anda dapat melanjutkan pembayaran nanti.');
-          setIsPaying(false);
-        }
+      console.log('Midtrans Snap is ready!');
+      
+      // Step 2: Create registration and payment (this will auto-create registration if needed)
+      console.log('Creating payment...');
+      const res = await eventService.createPayment(event.id);
+      const token = res?.snap_token;
+      
+      console.log('Payment created:', { 
+        hasToken: !!token, 
+        tokenPrefix: token ? token.substring(0, 30) + '...' : 'null',
+        hasSnap: !!window.snap 
       });
       
-      // Payment gateway sudah dibuka - jangan set setIsPaying(false) di sini
-      // karena callback (onSuccess/onPending/onError/onClose) akan handle itu
+      // Step 3: WAJIB buka payment gateway - TIDAK BOLEH SKIP!
+      if (!token || !token.trim()) {
+        // No token from backend - Midtrans may not be configured
+        console.error('No snap_token received from backend');
+        setError('Gagal mendapatkan token pembayaran. Pastikan MIDTRANS_SERVER_KEY sudah dikonfigurasi di server. Silakan hubungi admin.');
+        setIsPaying(false);
+        return;
+      }
+      
+      // Check if token is mock token
+      if (token.startsWith('mock-snap-token') || token.includes('mock')) {
+        console.error('Mock token detected:', token);
+        setError('Payment gateway belum dikonfigurasi dengan benar. Pastikan MIDTRANS_SERVER_KEY sudah di-set di Railway Variables. Silakan hubungi admin.');
+        setIsPaying(false);
+        return;
+      }
+      
+      // Double check window.snap is still available
+      if (!window.snap || typeof window.snap.pay !== 'function') {
+        console.error('window.snap.pay is not available');
+        setError('Payment gateway belum siap. Silakan refresh halaman dan coba lagi.');
+        setIsPaying(false);
+        return;
+      }
+      
+      // WAJIB: Buka payment gateway Midtrans - INI TIDAK BOLEH DI-SKIP!
+      console.log('Opening Midtrans payment gateway NOW...');
+      
+      // Set flag that payment gateway is opening (prevent any redirects)
+      let paymentGatewayOpened = false;
+      
+      try {
+        window.snap.pay(token, {
+          onSuccess: function(result) {
+            console.log('Payment success:', result);
+            paymentGatewayOpened = true;
+            setSuccess('Pembayaran berhasil! Status registrasi akan diperbarui.');
+            // Only redirect AFTER payment gateway callback
+            setTimeout(() => {
+              window.location.href = `/events/${id}`;
+            }, 2000);
+            setIsPaying(false);
+          },
+          onPending: function(result) {
+            console.log('Payment pending:', result);
+            paymentGatewayOpened = true;
+            setSuccess('Pembayaran tertunda. Silakan selesaikan pembayaran Anda.');
+            // Only redirect AFTER payment gateway callback
+            setTimeout(() => {
+              window.location.href = `/events/${id}`;
+            }, 2000);
+            setIsPaying(false);
+          },
+          onError: function(result) {
+            console.error('Payment error:', result);
+            paymentGatewayOpened = true;
+            setError('Terjadi kesalahan saat memproses pembayaran. Silakan coba lagi.');
+            setIsPaying(false);
+          },
+          onClose: function() {
+            // User closed payment popup without completing payment
+            console.log('Payment popup closed by user');
+            paymentGatewayOpened = true;
+            setError('Pembayaran dibatalkan. Anda dapat melanjutkan pembayaran nanti.');
+            setIsPaying(false);
+          }
+        });
+        
+        // Payment gateway should have opened - log untuk debugging
+        console.log('snap.pay() called - payment gateway should open now');
+        
+        // Set small delay to verify payment gateway opened
+        setTimeout(() => {
+          if (!paymentGatewayOpened) {
+            console.warn('Payment gateway may not have opened - check browser popup blocker');
+          }
+        }, 1000);
+        
+      } catch (snapError) {
+        console.error('Error calling snap.pay():', snapError);
+        setError('Gagal membuka payment gateway. Pastikan popup tidak diblokir browser. Silakan coba lagi.');
+        setIsPaying(false);
+      }
+      
+      // JANGAN redirect atau set state di sini - biarkan callback handle itu
       
     } catch (err) {
       console.error('Payment error:', err);
-      // On error, show error message
+      // On error, show error message - JANGAN redirect
       const errorMessage = err?.response?.data?.message || 'Gagal memulai pembayaran. Silakan coba lagi.';
       setError(errorMessage);
       setIsPaying(false);
+      // Jangan navigate/redirect di catch block - user harus tetap di halaman payment
     }
   };
 
