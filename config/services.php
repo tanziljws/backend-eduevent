@@ -46,4 +46,11 @@ return [
         'verify_url' => 'https://www.google.com/recaptcha/api/siteverify',
     ],
 
+    // Midtrans Payment Gateway configuration
+    'midtrans' => [
+        'server_key' => env('MIDTRANS_SERVER_KEY'),
+        'client_key' => env('REACT_APP_MIDTRANS_CLIENT_KEY'), // For frontend reference
+        'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
+    ],
+
 ];

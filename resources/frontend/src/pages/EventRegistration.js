@@ -174,9 +174,17 @@ function EventRegistration() {
       
       // Step 4: WAJIB buka payment gateway - jangan skip!
       if (!token) {
-        // No token from backend - this should not happen, but handle gracefully
-        console.error('No snap_token received from backend');
-        setError('Gagal mendapatkan token pembayaran. Silakan coba lagi atau hubungi admin.');
+        // No token from backend - Midtrans may not be configured or failed
+        console.error('No snap_token received from backend - Midtrans may not be configured');
+        setError('Gagal mendapatkan token pembayaran. Pastikan Midtrans sudah dikonfigurasi di server. Silakan hubungi admin.');
+        setIsPaying(false);
+        return;
+      }
+      
+      // Check if token is mock token (should not happen anymore, but check anyway)
+      if (token.startsWith('mock-snap-token')) {
+        console.error('Mock token detected - Midtrans integration not complete');
+        setError('Payment gateway belum dikonfigurasi dengan benar. Silakan hubungi admin.');
         setIsPaying(false);
         return;
       }
@@ -190,7 +198,7 @@ function EventRegistration() {
       }
       
       // WAJIB: Buka payment gateway Midtrans - jangan skip ini!
-      console.log('Opening Midtrans payment gateway...');
+      console.log('Opening Midtrans payment gateway with token:', token.substring(0, 20) + '...');
       window.snap.pay(token, {
         onSuccess: function(result) {
           console.log('Payment success:', result);

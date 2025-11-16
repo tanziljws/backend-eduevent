@@ -716,11 +716,98 @@ class EventController extends Controller
             $payment = Payment::create($paymentData);
         }
 
-        // TODO: Integrate with Midtrans or payment gateway
-        // For now, return mock snap_token
-        if ($hasSnapTokenColumn) {
-            $payment->snap_token = 'mock-snap-token-' . $payment->id;
-            $payment->save();
+        // Generate snap_token from Midtrans API
+        $snapToken = null;
+        
+        // Check if Midtrans is configured
+        $midtransServerKey = config('services.midtrans.server_key') ?? env('MIDTRANS_SERVER_KEY');
+        $midtransIsProduction = config('services.midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false);
+        
+        if ($midtransServerKey) {
+            try {
+                // Prepare Midtrans Snap transaction data
+                $transactionDetails = [
+                    'order_id' => $orderId,
+                    'gross_amount' => (float) $payment->amount,
+                ];
+                
+                $customerDetails = [
+                    'first_name' => $user->name ?? 'User',
+                    'email' => $user->email,
+                    'phone' => $user->phone ?? '',
+                ];
+                
+                $itemDetails = [
+                    [
+                        'id' => 'EVENT-' . $id,
+                        'price' => (float) $payment->amount,
+                        'quantity' => 1,
+                        'name' => $event->title ?? 'Event Registration',
+                    ],
+                ];
+                
+                $transactionData = [
+                    'transaction_details' => $transactionDetails,
+                    'customer_details' => $customerDetails,
+                    'item_details' => $itemDetails,
+                ];
+                
+                // Call Midtrans Snap API
+                $midtransUrl = $midtransIsProduction 
+                    ? 'https://app.midtrans.com/snap/v1/transactions'
+                    : 'https://app.sandbox.midtrans.com/snap/v1/transactions';
+                
+                $ch = curl_init($midtransUrl);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($transactionData));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'Content-Type: application/json',
+                    'Accept: application/json',
+                    'Authorization: Basic ' . base64_encode($midtransServerKey . ':'),
+                ]);
+                
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                if ($httpCode === 200 && $response) {
+                    $midtransResponse = json_decode($response, true);
+                    $snapToken = $midtransResponse['token'] ?? null;
+                    
+                    if ($snapToken && $hasSnapTokenColumn) {
+                        $payment->snap_token = $snapToken;
+                        $payment->save();
+                        
+                        Log::info('Midtrans snap_token generated successfully', [
+                            'payment_id' => $payment->id,
+                            'order_id' => $orderId,
+                            'amount' => $payment->amount,
+                        ]);
+                    }
+                } else {
+                    Log::error('Failed to generate Midtrans snap_token', [
+                        'http_code' => $httpCode,
+                        'response' => $response,
+                        'payment_id' => $payment->id,
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::error('Exception generating Midtrans snap_token', [
+                    'error' => $e->getMessage(),
+                    'payment_id' => $payment->id,
+                ]);
+            }
+        }
+        
+        // If no valid snap_token (Midtrans not configured or failed), return null
+        // Frontend will handle this gracefully
+        if (!$snapToken && $hasSnapTokenColumn) {
+            // Don't save mock token - return null instead
+            Log::warning('No valid Midtrans snap_token - Midtrans may not be configured', [
+                'payment_id' => $payment->id,
+                'has_server_key' => !empty($midtransServerKey),
+            ]);
         }
 
         // Get order_id from appropriate column
@@ -729,7 +816,7 @@ class EventController extends Controller
         return response()->json([
             'success' => true,
             'payment_id' => $payment->id,
-            'snap_token' => $payment->snap_token ?? null,
+            'snap_token' => $snapToken, // Return actual token or null
             'order_id' => $orderId,
             'amount' => (float) $payment->amount,
         ]);
