@@ -158,18 +158,32 @@ class AuthController extends Controller
 
         $user = User::findOrFail($request->user_id);
 
-        if (!$user->otp_code || !$user->otp_expires_at || Carbon::now()->greaterThan($user->otp_expires_at)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'OTP kedaluwarsa. Silakan kirim ulang.',
-            ], 400);
-        }
+        // Check if OTP columns exist
+        $hasOtpColumns = Schema::hasColumn('users', 'otp_code') && Schema::hasColumn('users', 'otp_expires_at');
+        
+        if ($hasOtpColumns) {
+            if (!$user->otp_code || !$user->otp_expires_at || Carbon::now()->greaterThan($user->otp_expires_at)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'OTP kedaluwarsa. Silakan kirim ulang.',
+                ], 400);
+            }
 
-        if ($request->code !== $user->otp_code) {
-            return response()->json([
-                'success' => false,
-                'message' => 'OTP tidak valid.',
-            ], 400);
+            if ($request->code !== $user->otp_code) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'OTP tidak valid.',
+                ], 400);
+            }
+        } else {
+            // If OTP columns don't exist, just verify email_verified_at
+            // This handles old database schema
+            if ($user->email_verified_at) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Email sudah diverifikasi sebelumnya.',
+                ], 400);
+            }
         }
 
         // Verify user
