@@ -27,9 +27,30 @@ export function AuthProvider({ children }) {
       setUser(response.user);
       return { success: true };
     } catch (error) {
+      // If user login fails, try admin login
+      try {
+        const adminResponse = await authService.loginAdmin(email, password);
+        setUser(adminResponse.user);
+        return { success: true, isAdmin: true };
+      } catch (adminError) {
+        // Both failed, return user error
+        return { 
+          success: false, 
+          error: error.response?.data?.message || adminError.response?.data?.message || 'Login gagal' 
+        };
+      }
+    }
+  };
+
+  const loginAdmin = async (email, password) => {
+    try {
+      const response = await authService.loginAdmin(email, password);
+      setUser(response.user);
+      return { success: true };
+    } catch (error) {
       return { 
         success: false, 
-        error: error.response?.data?.message || 'Login gagal' 
+        error: error.response?.data?.message || 'Admin login gagal' 
       };
     }
   };
@@ -70,6 +91,7 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     login,
+    loginAdmin,
     register,
     logout,
     verifyEmail,

@@ -31,6 +31,21 @@ export const authService = {
     return response.data;
   },
 
+  // Login admin
+  loginAdmin: async (email, password) => {
+    const response = await api.post('/auth/admin/login', {
+      email,
+      password
+    });
+    
+    if (response.data.token) {
+      localStorage.setItem('auth_token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+    
+    return response.data;
+  },
+
   // Logout user
   logout: () => {
     localStorage.removeItem('auth_token');

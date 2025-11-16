@@ -34,8 +34,14 @@ function Login() {
     try {
       const result = await login(formData.email, formData.password);
       if (result.success) {
-        // Redirect langsung ke halaman events setelah login
-        navigate('/events', { replace: true });
+        // Redirect based on user role
+        if (result.isAdmin) {
+          // Admin login - redirect to admin dashboard
+          navigate('/admin/dashboard', { replace: true });
+        } else {
+          // Regular user login - redirect to events
+          navigate('/events', { replace: true });
+        }
       } else {
         setError(result.error);
       }
