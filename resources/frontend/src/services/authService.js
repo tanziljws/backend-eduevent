@@ -48,8 +48,19 @@ export const authService = {
 
   // Logout user
   logout: () => {
+    // Clear all auth-related data from localStorage
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
+    // Also clear any other potential auth keys
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.includes('auth') || key.includes('token') || key.includes('user'))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key));
   },
 
   // Get current user from localStorage

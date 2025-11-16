@@ -25,14 +25,39 @@ class EnsureAdminIsAdmin
             $token = \Laravel\Sanctum\PersonalAccessToken::findToken($bearerToken);
             
             if ($token) {
+                // Get expected admin class name
+                $adminClassName = \App\Models\Admin::class;
+                
                 // Check if token belongs to Admin model
-                if ($token->tokenable_type === \App\Models\Admin::class) {
+                // Use both direct comparison and string comparison for compatibility
+                if ($token->tokenable_type === $adminClassName || $token->tokenable_type === 'App\\Models\\Admin') {
                     $admin = $token->tokenable;
+                    
+                    // Double check it's actually an Admin instance
+                    if (!($admin instanceof \App\Models\Admin)) {
+                        \Log::warning('Token tokenable_type is Admin but instance is not Admin', [
+                            'tokenable_type' => $token->tokenable_type,
+                            'tokenable_class' => get_class($admin),
+                        ]);
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Forbidden. Admin access required. Please login as admin.',
+                        ], 403);
+                    }
                 } else {
                     // Token exists but belongs to User, not Admin - reject immediately
+                    \Log::warning('Admin route accessed with non-admin token', [
+                        'tokenable_type' => $token->tokenable_type,
+                        'expected' => $adminClassName,
+                        'token_id' => $token->id,
+                    ]);
                     return response()->json([
                         'success' => false,
-                        'message' => 'Forbidden. Admin access required. Please login as admin.',
+                        'message' => 'Forbidden. Admin access required. Please logout and login as admin using admin credentials.',
+                        'debug' => config('app.debug') ? [
+                            'token_type' => $token->tokenable_type,
+                            'expected_type' => $adminClassName,
+                        ] : null,
                     ], 403);
                 }
             } else {
