@@ -4,12 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
+// use Illuminate\Database\Eloquent\SoftDeletes; // Disabled - table doesn't have deleted_at column
 
 class EventRegistration extends Model
 {
-    use HasFactory;
-    // Removed SoftDeletes - check if table has deleted_at column before enabling
+    use HasFactory; // SoftDeletes removed - table doesn't have deleted_at column
     
     // Specify table name if different from model name
     protected $table = 'registrations';
