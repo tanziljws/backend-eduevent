@@ -671,25 +671,24 @@ class EventController extends Controller
             $data = $request->except(['flyer', 'certificate_template']);
             $admin = $request->user();
             
-            // Handle created_by field - check if column exists and if it's nullable
+            // Handle created_by field - check if column exists
             if (Schema::hasColumn('events', 'created_by')) {
-                $isCreatedByNullable = Schema::getColumnType('events', 'created_by') !== 'bigint' || 
-                    (Schema::getConnection()->getDoctrineColumn('events', 'created_by')->getNotnull() === false);
-                
                 if ($admin instanceof \App\Models\Admin) {
                     $data['created_by'] = $admin->id;
                 } elseif ($admin instanceof \App\Models\User && $admin->role === 'admin') {
-                    // Fallback: if using User with admin role, try to find or use default admin ID
+                    // Fallback: if using User with admin role, try to find admin ID
                     if (Schema::hasTable('admins')) {
                         $defaultAdmin = \App\Models\Admin::first();
-                        $data['created_by'] = $defaultAdmin ? $defaultAdmin->id : ($isCreatedByNullable ? null : 1);
+                        $data['created_by'] = $defaultAdmin ? $defaultAdmin->id : 1; // Fallback to 1 if no admin found
                     } else {
-                        // If admins table doesn't exist, check if created_by can be null
-                        $data['created_by'] = $isCreatedByNullable ? null : 1; // Fallback to 1 if NOT NULL
+                        // If admins table doesn't exist, use 1 as fallback
+                        // In Railway DB, created_by is NOT NULL, so we need a valid value
+                        $data['created_by'] = 1;
                     }
                 } else {
-                    // No admin found - set based on nullable status
-                    $data['created_by'] = $isCreatedByNullable ? null : 1; // Fallback to 1 if NOT NULL
+                    // No admin found - use fallback value
+                    // In Railway DB, created_by is NOT NULL, so we need a valid value
+                    $data['created_by'] = 1;
                 }
             }
             
