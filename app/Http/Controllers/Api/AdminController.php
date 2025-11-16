@@ -116,18 +116,25 @@ class AdminController extends Controller
         }
 
         // Top events (by registration count)
-        $topEvents = Event::select('events.*', DB::raw('COUNT(registrations.id) as registration_count'))
-            ->leftJoin('registrations', function($join) {
-                $join->on('events.id', '=', 'registrations.event_id')
-                     ->where(function($query) {
-                         $query->where('registrations.status', '!=', 'cancelled')
-                               ->orWhereNull('registrations.status');
-                     });
-            })
-            ->groupBy('events.id')
-            ->orderBy('registration_count', 'desc')
+        // Use subquery to count non-cancelled registrations per event
+        $topEvents = Event::select('events.*')
+            ->withCount([
+                'registrations' => function($query) {
+                    $query->where('status', '!=', 'cancelled');
+                }
+            ])
+            ->orderBy('registrations_count', 'desc')
             ->take(10)
-            ->get();
+            ->get()
+            ->map(function($event) {
+                return [
+                    'id' => $event->id,
+                    'title' => $event->title,
+                    'event_date' => $event->event_date,
+                    'category' => $event->category,
+                    'registration_count' => $event->registrations_count ?? 0,
+                ];
+            });
 
         return response()->json([
             'success' => true,
