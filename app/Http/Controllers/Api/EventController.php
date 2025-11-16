@@ -500,25 +500,53 @@ class EventController extends Controller
             ], 400);
         }
 
+        // Check which columns exist in payments table
+        $hasEventIdColumn = Schema::hasColumn('payments', 'event_id');
+        $hasUserIdColumn = Schema::hasColumn('payments', 'user_id');
+        $hasOrderIdColumn = Schema::hasColumn('payments', 'order_id');
+        $hasMidtransOrderIdColumn = Schema::hasColumn('payments', 'midtrans_order_id');
+        $hasSnapTokenColumn = Schema::hasColumn('payments', 'snap_token');
+        $hasTransactionIdColumn = Schema::hasColumn('payments', 'transaction_id');
+        $hasMidtransTransactionIdColumn = Schema::hasColumn('payments', 'midtrans_transaction_id');
+        $hasNotesColumn = Schema::hasColumn('payments', 'notes');
+        
         $payment = Payment::where('registration_id', $registration->id)
             ->where('status', '!=', 'paid')
             ->first();
 
         if (!$payment) {
-            $payment = Payment::create([
-                'event_id' => $id,
-                'user_id' => $user->id,
+            // Prepare payment data based on table schema
+            $paymentData = [
                 'registration_id' => $registration->id,
                 'amount' => $event->price,
                 'status' => 'pending',
-                'order_id' => 'ORD-' . time() . '-' . $registration->id,
-            ]);
+            ];
+            
+            // Set event_id and user_id if columns exist (new schema)
+            if ($hasEventIdColumn) {
+                $paymentData['event_id'] = $id;
+            }
+            if ($hasUserIdColumn) {
+                $paymentData['user_id'] = $user->id;
+            }
+            
+            // Set order_id or midtrans_order_id based on which column exists
+            $orderId = 'EVENT-' . $id . '-' . $user->id . '-' . time();
+            if ($hasOrderIdColumn) {
+                $paymentData['order_id'] = $orderId;
+            } elseif ($hasMidtransOrderIdColumn) {
+                $paymentData['midtrans_order_id'] = $orderId;
+            }
+            
+            $payment = Payment::create($paymentData);
         }
 
         // TODO: Integrate with Midtrans or payment gateway
         // For now, return mock snap_token
-        $payment->snap_token = 'mock-snap-token-' . $payment->id;
-        $payment->save();
+        if ($hasSnapTokenColumn) {
+            $payment->snap_token = 'mock-snap-token-' . $payment->id;
+            $payment->save();
+        }
 
         return response()->json([
             'success' => true,

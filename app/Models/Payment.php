@@ -21,6 +21,10 @@ class Payment extends Model
         'order_id',
         'paid_at',
         'notes',
+        // Old schema fields (Railway DB)
+        'midtrans_order_id',
+        'midtrans_transaction_id',
+        'midtrans_response',
     ];
 
     protected $casts = [
