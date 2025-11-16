@@ -107,4 +107,13 @@ Route::prefix('admin')->middleware('admin')->group(function () {
         Route::get('/reports/monthly-attendees', [AdminController::class, 'monthlyAttendees']);
         Route::get('/reports/top10-events', [AdminController::class, 'topEvents']);
         Route::get('/events/{id}/export', [AdminController::class, 'exportEventParticipants']);
-});
+
+        // Participants
+        Route::get('/participants', [AdminController::class, 'participants']);
+        Route::get('/participants/statistics', [AdminController::class, 'participantsStatistics']);
+
+        // Messages
+        Route::get('/messages', [AdminController::class, 'messages']);
+        Route::post('/messages/{id}/mark-read', [AdminController::class, 'markMessageAsRead']);
+        Route::delete('/messages/{id}', [AdminController::class, 'deleteMessage']);
+    });

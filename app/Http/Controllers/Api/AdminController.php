@@ -254,4 +254,211 @@ class AdminController extends Controller
             'message' => 'Export feature coming soon.',
         ], 501);
     }
+
+    /**
+     * Get all participants (registrations)
+     */
+    public function participants(Request $request)
+    {
+        $registrations = EventRegistration::with(['user', 'event', 'attendance'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $data = $registrations->map(function ($registration) {
+            return [
+                'id' => $registration->id,
+                'user_id' => $registration->user_id,
+                'user_name' => $registration->user->name ?? $registration->name ?? 'N/A',
+                'user_email' => $registration->user->email ?? $registration->email ?? 'N/A',
+                'event_id' => $registration->event_id,
+                'event_title' => $registration->event->title ?? 'N/A',
+                'event_date' => $registration->event->event_date ?? null,
+                'status' => $registration->status ?? 'pending',
+                'registered_at' => $registration->registered_at ?? $registration->created_at,
+                'attendance_status' => $registration->attendance->status ?? null,
+                'attended_at' => $registration->attendance->checked_in_at ?? null,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+        ]);
+    }
+
+    /**
+     * Get participants statistics
+     */
+    public function participantsStatistics(Request $request)
+    {
+        $total = EventRegistration::count();
+        $confirmed = EventRegistration::where('status', 'confirmed')->orWhere('status', 'registered')->count();
+        $pending = EventRegistration::where('status', 'pending')->count();
+        $attended = Attendance::where('status', 'present')->count();
+        $cancelled = EventRegistration::where('status', 'cancelled')->count();
+
+        return response()->json([
+            'success' => true,
+            'total_participants' => $total,
+            'confirmed' => $confirmed,
+            'pending' => $pending,
+            'attended' => $attended,
+            'cancelled' => $cancelled,
+        ]);
+    }
+
+    /**
+     * Get all messages (contact messages)
+     */
+    public function messages(Request $request)
+    {
+        // Check if messages/contacts table exists
+        if (!Schema::hasTable('contacts') && !Schema::hasTable('messages')) {
+            return response()->json([
+                'success' => true,
+                'messages' => [
+                    'data' => [],
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => 15,
+                    'total' => 0,
+                ],
+                'stats' => [
+                    'total' => 0,
+                    'unread' => 0,
+                    'read' => 0,
+                ],
+            ]);
+        }
+
+        $tableName = Schema::hasTable('contacts') ? 'contacts' : 'messages';
+        $page = $request->get('page', 1);
+        $perPage = 15;
+        $status = $request->get('status', 'all');
+        $search = $request->get('search', '');
+
+        $query = DB::table($tableName);
+
+        if ($status !== 'all') {
+            // Check if status column exists
+            if (Schema::hasColumn($tableName, 'status')) {
+                if ($status === 'read') {
+                    $query->where('status', 'read')->orWhere('read_at', '!=', null);
+                } elseif ($status === 'unread') {
+                    $query->where(function($q) {
+                        $q->where('status', 'unread')
+                          ->orWhere('status', null)
+                          ->orWhere('read_at', null);
+                    });
+                }
+            } elseif (Schema::hasColumn($tableName, 'read_at')) {
+                if ($status === 'read') {
+                    $query->whereNotNull('read_at');
+                } elseif ($status === 'unread') {
+                    $query->whereNull('read_at');
+                }
+            }
+        }
+
+        if ($search) {
+            $query->where(function($q) use ($search, $tableName) {
+                if (Schema::hasColumn($tableName, 'name')) {
+                    $q->where('name', 'like', "%{$search}%");
+                }
+                if (Schema::hasColumn($tableName, 'email')) {
+                    $q->orWhere('email', 'like', "%{$search}%");
+                }
+                if (Schema::hasColumn($tableName, 'subject')) {
+                    $q->orWhere('subject', 'like', "%{$search}%");
+                }
+                if (Schema::hasColumn($tableName, 'message')) {
+                    $q->orWhere('message', 'like', "%{$search}%");
+                }
+            });
+        }
+
+        $total = $query->count();
+        $messages = $query->orderBy('created_at', 'desc')
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->get();
+
+        // Stats
+        $statsQuery = DB::table($tableName);
+        $statsTotal = $statsQuery->count();
+        
+        $statsRead = 0;
+        $statsUnread = 0;
+        if (Schema::hasColumn($tableName, 'read_at')) {
+            $statsRead = $statsQuery->clone()->whereNotNull('read_at')->count();
+            $statsUnread = $statsTotal - $statsRead;
+        } elseif (Schema::hasColumn($tableName, 'status')) {
+            $statsRead = $statsQuery->clone()->where('status', 'read')->count();
+            $statsUnread = $statsQuery->clone()->where('status', '!=', 'read')->orWhereNull('status')->count();
+        }
+
+        return response()->json([
+            'success' => true,
+            'messages' => [
+                'data' => $messages,
+                'current_page' => (int) $page,
+                'last_page' => (int) ceil($total / $perPage),
+                'per_page' => $perPage,
+                'total' => $total,
+            ],
+            'stats' => [
+                'total' => $statsTotal,
+                'read' => $statsRead,
+                'unread' => $statsUnread,
+            ],
+        ]);
+    }
+
+    /**
+     * Mark message as read
+     */
+    public function markMessageAsRead(Request $request, $id)
+    {
+        $tableName = Schema::hasTable('contacts') ? 'contacts' : 'messages';
+        
+        if (!Schema::hasTable($tableName)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Messages table not found.',
+            ], 404);
+        }
+
+        if (Schema::hasColumn($tableName, 'read_at')) {
+            DB::table($tableName)->where('id', $id)->update(['read_at' => now()]);
+        } elseif (Schema::hasColumn($tableName, 'status')) {
+            DB::table($tableName)->where('id', $id)->update(['status' => 'read']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Message marked as read.',
+        ]);
+    }
+
+    /**
+     * Delete message
+     */
+    public function deleteMessage(Request $request, $id)
+    {
+        $tableName = Schema::hasTable('contacts') ? 'contacts' : 'messages';
+        
+        if (!Schema::hasTable($tableName)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Messages table not found.',
+            ], 404);
+        }
+
+        DB::table($tableName)->where('id', $id)->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Message deleted.',
+        ]);
+    }
 }
