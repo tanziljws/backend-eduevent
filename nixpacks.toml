@@ -18,6 +18,7 @@ cmds = [
   "curl -sS https://getcomposer.org/installer | php || true",
   "php composer.phar install --optimize-autoloader --no-dev || true",
   "cd resources/frontend && npm run build && cd ../..",
+  "php artisan storage:link || true",
   "php artisan config:cache",
   "php artisan route:cache"
 ]

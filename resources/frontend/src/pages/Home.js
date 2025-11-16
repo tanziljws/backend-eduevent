@@ -539,10 +539,13 @@ function Home() {
                               event.flyer_url || event.image_url || 
                               (event.image_path || event.flyer_path) && (event.image_path !== '0' && event.flyer_path !== '0')
                                 ? resolveMediaUrl(event.image_path || event.flyer_path)
-                                : `https://images.unsplash.com/photo-${1492684223066 + index}-043259c2d91e?q=80&w=800&auto=format&fit=crop`
+                                : ''
                             }
                             alt={event.title || 'Event'}
                             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                         </div>

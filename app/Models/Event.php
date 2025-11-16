@@ -90,8 +90,12 @@ class Event extends Model
 
         // Return full URL using asset() with request scheme/host for dynamic port
         if (Storage::disk('public')->exists($path)) {
-            // Use request()->getSchemeAndHttpHost() if available, otherwise asset()
+            // Force HTTPS in production, use request scheme in development
             $baseUrl = request() ? request()->getSchemeAndHttpHost() : (config('app.url') ?: url('/'));
+            // Force HTTPS if not local
+            if (app()->environment('production') && !str_contains($baseUrl, 'localhost') && !str_contains($baseUrl, '127.0.0.1')) {
+                $baseUrl = str_replace('http://', 'https://', $baseUrl);
+            }
             return rtrim($baseUrl, '/') . '/storage/' . ltrim($path, '/');
         }
 

@@ -12,15 +12,19 @@ function getBackendOrigin() {
   try {
     const url = new URL(API_BASE_URL);
     // If baseURL includes '/api' path, remove it for static assets
-    const origin = `${url.protocol}//${url.host}`;
+    let origin = `${url.protocol}//${url.host}`;
     const basePath = url.pathname || '';
     if (basePath && basePath.endsWith('/api')) {
-      return origin; // assets are typically served from root (e.g., /storage/...)
+      origin = origin; // assets are typically served from root (e.g., /storage/...)
+    }
+    // Force HTTPS in production (non-localhost)
+    if (window.location.protocol === 'https:' && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+      origin = origin.replace('http://', 'https://');
     }
     return origin;
   } catch (_) {
     // Fallback to same origin
-    return '';
+    return window.location.origin || '';
   }
 }
 

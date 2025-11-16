@@ -408,15 +408,9 @@ function Events() {
   };
 
   const placeholderByCategory = (category) => {
-    const normalizedCategory = normalizeCategory(category);
-    const placeholders = {
-      teknologi: 'https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=800',
-      seni_budaya: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?q=80&w=800',
-      olahraga: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?q=80&w=800',
-      akademik: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0a?q=80&w=800',
-      sosial: 'https://images.unsplash.com/photo-1529333166437-7750a6dd5a70?q=80&w=800'
-    };
-    return placeholders[normalizedCategory] || 'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?q=80&w=800';
+    // Return empty string to let image error handler show placeholder
+    // or use a simple data URI placeholder if needed
+    return '';
   };
 
   const formatDate = (dateString) => {
