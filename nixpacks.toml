@@ -8,12 +8,14 @@ cmds = [
 
 [phases.install]
 cmds = [
-  "composer install --optimize-autoloader --no-dev",
+  "curl -sS https://getcomposer.org/installer | php",
+  "php composer.phar install --optimize-autoloader --no-dev",
   "cd resources/frontend && npm install && cd ../.."
 ]
 
 [phases.build]
 cmds = [
+  "php composer.phar install --optimize-autoloader --no-dev || true",
   "cd resources/frontend && npm run build && cd ../..",
   "php artisan config:cache",
   "php artisan route:cache"
