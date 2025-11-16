@@ -41,42 +41,60 @@ class AuthController extends Controller
         if ($existingUnverifiedUser) {
             // Delete unverified user to allow re-registration
             // We delete regardless of OTP expiry to allow user to re-register anytime
-            Log::info('Deleting unverified user to allow re-registration', [
+            $logData = [
                 'user_id' => $existingUnverifiedUser->id,
                 'email' => $email,
                 'created_at' => $existingUnverifiedUser->created_at,
-                'otp_expires_at' => $existingUnverifiedUser->otp_expires_at,
-                'is_expired' => $existingUnverifiedUser->otp_expires_at 
+            ];
+            
+            // Only log OTP data if columns exist
+            if (Schema::hasColumn('users', 'otp_expires_at')) {
+                $logData['otp_expires_at'] = $existingUnverifiedUser->otp_expires_at ?? null;
+                $logData['is_expired'] = $existingUnverifiedUser->otp_expires_at 
                     ? Carbon::now()->greaterThan($existingUnverifiedUser->otp_expires_at) 
-                    : true,
-            ]);
+                    : true;
+            }
+            
+            Log::info('Deleting unverified user to allow re-registration', $logData);
             $existingUnverifiedUser->delete();
         }
         
         // Validate after cleanup
-        $request->validate([
+        $validationRules = [
             'name' => 'required|string|max:255',
-            'username' => 'nullable|string|max:50|unique:users,username',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6|confirmed',
             'phone' => 'nullable|string|max:20',
-        ]);
+        ];
+        
+        // Only validate username unique if column exists
+        if (Schema::hasColumn('users', 'username')) {
+            $validationRules['username'] = 'nullable|string|max:50|unique:users,username';
+        }
+        
+        $request->validate($validationRules);
 
         try {
             
-            // Generate username from email if not provided
-            $username = $request->username 
-                ? trim($request->username) 
-                : $this->generateUsernameFromEmail($email);
-
             // Prepare user data
             $userData = [
                 'name' => trim($request->name),
-                'username' => $username,
                 'email' => $email,
-                'phone' => $request->phone ? trim($request->phone) : null,
                 'password' => $request->password,
             ];
+            
+            // Only add username if column exists
+            if (Schema::hasColumn('users', 'username')) {
+                $username = $request->username 
+                    ? trim($request->username) 
+                    : $this->generateUsernameFromEmail($email);
+                $userData['username'] = $username;
+            }
+            
+            // Only add phone if column exists
+            if (Schema::hasColumn('users', 'phone')) {
+                $userData['phone'] = $request->phone ? trim($request->phone) : null;
+            }
             
             // Only add is_verified if column exists
             if (Schema::hasColumn('users', 'is_verified')) {

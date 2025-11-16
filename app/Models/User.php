@@ -29,6 +29,8 @@ class User extends Authenticatable
         'otp_code',
         'otp_expires_at',
         'profile_photo_path',
+        // Note: is_verified, otp_code, otp_expires_at may not exist in all database schemas
+        // They are handled conditionally in AuthController
     ];
 
     /**
@@ -54,11 +56,17 @@ class User extends Authenticatable
         ];
         
         // Only add OTP and is_verified casts if columns exist
-        if (\Schema::hasColumn($this->getTable(), 'otp_expires_at')) {
-            $casts['otp_expires_at'] = 'datetime';
-        }
-        if (\Schema::hasColumn($this->getTable(), 'is_verified')) {
-            $casts['is_verified'] = 'boolean';
+        // Use try-catch to handle cases where table doesn't exist yet or during migrations
+        try {
+            if (Schema::hasColumn('users', 'otp_expires_at')) {
+                $casts['otp_expires_at'] = 'datetime';
+            }
+            if (Schema::hasColumn('users', 'is_verified')) {
+                $casts['is_verified'] = 'boolean';
+            }
+        } catch (\Exception $e) {
+            // If schema check fails, just return base casts
+            // This can happen during migrations or if table doesn't exist yet
         }
         
         return $casts;
