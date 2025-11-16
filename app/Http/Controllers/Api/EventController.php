@@ -62,7 +62,9 @@ class EventController extends Controller
 
         // Paginate - default to 50 to show more events
         $perPage = min($request->get('per_page', 50), 100); // Max 100 per page
-        $events = $query->with(['creator'])->paginate($perPage);
+        // Remove creator eager loading if admins table doesn't exist
+        // $events = $query->with(['creator'])->paginate($perPage);
+        $events = $query->paginate($perPage);
 
         // Format response
         $events->getCollection()->transform(function ($event) {
