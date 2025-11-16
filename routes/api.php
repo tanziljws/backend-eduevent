@@ -77,9 +77,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Certificates
     Route::get('/certificates/{id}/download', [UserController::class, 'downloadCertificate']);
+});
 
-    // Admin routes
-    Route::prefix('admin')->middleware('admin')->group(function () {
+// Admin routes (separate from user routes - admin middleware handles authentication itself)
+Route::prefix('admin')->middleware('admin')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard']);
         Route::get('/profile', [AdminController::class, 'profile']);
         Route::put('/profile', [AdminController::class, 'updateProfile']);

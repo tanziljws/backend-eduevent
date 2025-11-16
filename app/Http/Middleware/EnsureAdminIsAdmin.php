@@ -15,37 +15,35 @@ class EnsureAdminIsAdmin
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $user = null;
         $admin = null;
 
-        // First, check if using Sanctum token (API request)
-        if ($request->bearerToken()) {
-            $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+        // Check if using Sanctum token (API request with Bearer token)
+        $bearerToken = $request->bearerToken();
+        
+        if ($bearerToken) {
+            // Check token directly from database
+            $token = \Laravel\Sanctum\PersonalAccessToken::findToken($bearerToken);
             
             if ($token) {
                 // Check if token belongs to Admin model
                 if ($token->tokenable_type === \App\Models\Admin::class) {
                     $admin = $token->tokenable;
                 } else {
-                    // Token exists but belongs to User, not Admin
+                    // Token exists but belongs to User, not Admin - reject immediately
                     return response()->json([
                         'success' => false,
-                        'message' => 'Forbidden. Admin access required.',
+                        'message' => 'Forbidden. Admin access required. Please login as admin.',
                     ], 403);
                 }
+            } else {
+                // Token not found in database - invalid token
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. Invalid or expired token.',
+                ], 401);
             }
-        }
-
-        // If no admin from Sanctum token, try Sanctum's user method
-        if (!$admin) {
-            $user = $request->user('sanctum');
-            if ($user instanceof \App\Models\Admin) {
-                $admin = $user;
-            }
-        }
-
-        // If still no admin, try session-based admin guard
-        if (!$admin) {
+        } else {
+            // No bearer token - try session-based admin guard (for web routes)
             $admin = auth('admin')->user();
         }
 
@@ -53,7 +51,7 @@ class EnsureAdminIsAdmin
         if (!$admin || !($admin instanceof \App\Models\Admin)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Forbidden. Admin access required.',
+                'message' => 'Forbidden. Admin access required. Please login as admin.',
             ], 403);
         }
 
