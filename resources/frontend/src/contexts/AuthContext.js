@@ -22,22 +22,23 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
-    // Try admin login first (more specific - admin should use admin endpoint)
+    // Try user login first (most common case)
     try {
-      const adminResponse = await authService.loginAdmin(email, password);
-      setUser(adminResponse.user);
-      return { success: true, isAdmin: true };
-    } catch (adminError) {
-      // If admin login fails, try user login
+      const response = await authService.login(email, password);
+      setUser(response.user);
+      return { success: true, isAdmin: false };
+    } catch (userError) {
+      // If user login fails, try admin login as fallback
+      // This handles cases where user might be an admin in users table with role='admin'
       try {
-        const response = await authService.login(email, password);
-        setUser(response.user);
-        return { success: true, isAdmin: false };
-      } catch (error) {
-        // Both failed, return admin error (more specific)
+        const adminResponse = await authService.loginAdmin(email, password);
+        setUser(adminResponse.user);
+        return { success: true, isAdmin: true };
+      } catch (adminError) {
+        // Both failed, return user error (more user-friendly)
         return { 
           success: false, 
-          error: adminError.response?.data?.message || error.response?.data?.message || 'Login gagal' 
+          error: userError.response?.data?.message || adminError.response?.data?.message || 'Email atau password tidak valid' 
         };
       }
     }
