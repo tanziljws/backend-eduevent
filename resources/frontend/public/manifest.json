@@ -1,0 +1,25 @@
+{
+  "short_name": "EduFest",
+  "name": "EduFest - Platform Manajemen Event SMKN 4 Bogor",
+  "icons": [
+    {
+      "src": "edufes.tlogo.png",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "edufes.tlogo.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "edufes.tlogo.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0088CC",
+  "background_color": "#ffffff"
+}

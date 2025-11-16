@@ -29,21 +29,6 @@ use App\Http\Controllers\DownloadController;
 |
 */
 
-// API Info Route (Root)
-Route::get('/', function () {
-    return response()->json([
-        'message' => 'EduEvent Backend API',
-        'version' => '1.0.0',
-        'api_documentation' => url('/api'),
-        'status' => 'active',
-        'endpoints' => [
-            'auth' => url('/api/auth'),
-            'events' => url('/api/events'),
-            'admin' => url('/api/admin'),
-        ]
-    ]);
-});
-
 // Guest Routes (Public) - Legacy CMS routes (can be removed if not needed)
 // Route::get('/profil', [GuestController::class, 'profil'])->name('guest.profil');
 
@@ -169,3 +154,27 @@ Route::prefix('petugas')->name('petugas.')->group(function () {
         Route::resource('foto', App\Http\Controllers\Petugas\FotoController::class);
     });
 });
+
+// Serve React App for all non-API routes (SPA catch-all)
+// API routes are handled in routes/api.php
+// This route must be LAST to catch all non-API routes
+// It will serve index.html for any route that doesn't match above routes
+Route::get('/{any}', function () {
+    $indexPath = public_path('index.html');
+    if (file_exists($indexPath)) {
+        return response()->file($indexPath, ['Content-Type' => 'text/html']);
+    }
+    // Fallback if index.html doesn't exist yet
+    return response()->json([
+        'message' => 'EduEvent Backend API',
+        'version' => '1.0.0',
+        'api_documentation' => url('/api'),
+        'status' => 'active',
+        'endpoints' => [
+            'auth' => url('/api/auth'),
+            'events' => url('/api/events'),
+            'admin' => url('/api/admin'),
+        ],
+        'note' => 'Frontend build not found. Run: cd resources/frontend && npm install && npm run build'
+    ]);
+})->where('any', '^(?!api).*$');

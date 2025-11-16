@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Environment Variables</title>
+</head>
+<body>
+    <h1>Environment Variable Test</h1>
+    <div id="result"></div>
+    
+    <script>
+        // This will NOT work in static HTML
+        // Environment variables are only available during build time in React
+        document.getElementById('result').innerHTML = `
+            <p><strong>Note:</strong> Environment variables in Create React App are only available during build time.</p>
+            <p>To test, check the browser console on your React app page.</p>
+            <p>Run this in console:</p>
+            <pre>console.log(process.env.REACT_APP_MIDTRANS_CLIENT_KEY);</pre>
+        `;
+    </script>
+</body>
+</html>

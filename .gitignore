@@ -25,6 +25,21 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
-# Frontend is in separate repository
+# Frontend build files (will be generated on build)
+/public/index.html
+/public/static
+/public/manifest.json
+/public/robots.txt
+/public/logo*.png
+/public/favicon.ico
+/public/edufes.tlogo.png
+/public/test-env.html
+/public/asset-manifest.json
+
+# Frontend source node_modules
+/resources/frontend/node_modules
+/resources/frontend/build
+
+# Old frontend repository (can be removed)
 /frontend-react.js
 .env.backup.*

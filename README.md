@@ -1,63 +1,42 @@
-# EduEvent Backend API
+# EduEvent - Event Management System
 
-Laravel backend API untuk sistem EduEvent.
+Laravel + React monorepo untuk sistem manajemen event dan sertifikat.
 
-## 🏗️ Struktur Backend
+## 🏗️ Struktur Project
 
-### **Fitur Utama**
-- ✅ **Authentication System**
-  - User authentication dengan OTP email
-  - Admin authentication
-  - Petugas authentication
-  - Password reset dengan OTP
+### **Backend (Laravel)**
+- API endpoints di `/api/*`
+- Web routes untuk legacy CMS (opsional)
+- Frontend React di-build ke `public/` folder
 
-- ✅ **Content Management**
-  - Posts (Berita/Artikel)
-  - Kategori
-  - Galeri
-  - Foto
-  - Profile Sekolah
-  - Testimoni
-
-- ✅ **User Features**
-  - Like galeri
-  - Bookmark galeri
-  - Comment galeri
-  - Download foto
-  - User profile management
-
-- ✅ **Admin Features**
-  - Dashboard dengan statistik
-  - CRUD Posts
-  - CRUD Kategori
-  - CRUD Galeri
-  - CRUD Foto
-  - CRUD Petugas
-  - Manage Testimoni
-  - Edit Profile Sekolah
-
-- ✅ **Petugas Features**
-  - Dashboard dengan statistik terbatas
-  - CRUD Posts
-  - CRUD Galeri
-  - CRUD Foto
+### **Frontend (React)**
+- Source code: `resources/frontend/`
+- Build output: `public/` (dihasilkan saat build)
 
 ## 🚀 Installation
 
-### **1. Install Dependencies**
+### **1. Install Backend Dependencies**
 
 ```bash
 composer install
 ```
 
-### **2. Environment Setup**
+### **2. Install Frontend Dependencies**
+
+```bash
+cd resources/frontend
+npm install
+cd ../..
+```
+
+### **3. Environment Setup**
 
 ```bash
 cp .env.example .env
 php artisan key:generate
 ```
 
-### **3. Configure Database**
+### **4. Configure Database**
 
 Edit `.env` file:
 ```env
@@ -67,12 +46,6 @@ DB_PORT=3306
 DB_DATABASE=eduevent
 DB_USERNAME=root
 DB_PASSWORD=your_password
-```
-
-### **4. Run Migrations**
-
-```bash
-php artisan migrate --seed
 ```
 
 ### **5. Configure Email (Brevo)**
@@ -85,118 +58,170 @@ MAIL_FROM_NAME="EduEvent"
 BREVO_API_KEY=your-brevo-api-key
 ```
 
-### **6. Storage Setup**
+### **6. Run Migrations**
+
+```bash
+php artisan migrate --seed
+```
+
+### **7. Setup Storage**
 
 ```bash
 php artisan storage:link
 ```
 
-### **7. Start Server**
+### **8. Build Frontend**
+
+```bash
+cd resources/frontend
+npm run build
+cd ../..
+```
+
+Ini akan meng-copy build files ke `public/` folder.
+
+### **9. Start Server**
 
 ```bash
 php artisan serve
 ```
 
-## 📡 API Routes
+Aplikasi akan tersedia di `http://localhost:8000`
 
-### **Guest Routes (Public)**
-- `GET /` - Home page
-- `GET /profil` - Profile sekolah
-- `GET /agenda` - List agenda
-- `GET /agenda/{post}` - Detail agenda
-- `GET /informasi` - List informasi
-- `GET /informasi/{post}` - Detail informasi
-- `GET /galeri` - List galeri
-- `GET /galeri/{galery}` - Detail galeri
+## 📦 Development
 
-### **User Routes (Authenticated)**
-- `POST /galleries/{galery}/like` - Like/unlike galeri
-- `POST /galleries/{galery}/bookmark` - Bookmark/unbookmark galeri
-- `POST /galleries/{galery}/comments` - Add comment
-- `GET /user/profile` - Get user profile
-- `PUT /user/profile` - Update user profile
+### **Backend Development**
 
-### **Admin Routes (Protected)**
-- `GET /admin` - Dashboard
-- Resource routes for: posts, kategori, galery, foto, petugas, profile, testimonials
+```bash
+php artisan serve
+```
 
-### **Petugas Routes (Protected)**
-- `GET /petugas` - Dashboard
-- Resource routes for: posts, galery, foto
+### **Frontend Development**
+
+Untuk development mode dengan hot reload:
+
+```bash
+cd resources/frontend
+npm start
+```
+
+Frontend akan berjalan di `http://localhost:3000` dan akan proxy API requests ke `http://localhost:8000/api`
+
+### **Build Frontend for Production**
+
+```bash
+cd resources/frontend
+npm run build
+cd ../..
+```
+
+Build files akan otomatis di-copy ke `public/` folder.
 
 ## 🗄️ Database
 
 ### **Tables**
 - `users` - User accounts
-- `admins` - Admin accounts
-- `petugas` - Petugas accounts
-- `posts` - Posts/Artikel
-- `kategori` - Kategori posts
-- `galery` - Galeri foto
-- `foto` - Foto dalam galeri
-- `profile` - Profile sekolah
-- `testimonials` - Testimoni
-- `likes` - User likes
-- `bookmarks` - User bookmarks
-- `comments` - User comments
-- `downloads` - Download tracking
+- `events` - Events
+- `registrations` - Event registrations
+- `attendances` - Attendance records
+- `certificates` - Certificates
+- `payments` - Payments
+- `banners` - Banners
+- `wishlists` - Wishlists
+
+## 📡 API Routes
+
+### **Public Routes**
+- `GET /api/events` - List events
+- `GET /api/events/{id}` - Event detail
+- `GET /api/banners` - List banners
+- `POST /api/auth/register` - Register user
+- `POST /api/auth/login` - Login user
+- `POST /api/auth/verify-email` - Verify email with OTP
+- `POST /api/auth/request-reset` - Request password reset
+- `POST /api/auth/reset-password` - Reset password
+
+### **Protected Routes (User)**
+- `GET /api/auth/user` - Get current user
+- `POST /api/auth/logout` - Logout
+- `POST /api/events/{id}/register` - Register for event
+- `POST /api/events/{id}/attendance` - Submit attendance
+- `GET /api/me/history` - Get event history
+- `GET /api/me/certificates` - Get certificates
+- `GET /api/wishlist` - Get wishlist
+- `POST /api/events/{id}/wishlist` - Toggle wishlist
+
+### **Admin Routes**
+- `GET /api/admin/dashboard` - Dashboard stats
+- `POST /api/admin/events` - Create event
+- `PUT /api/admin/events/{id}` - Update event
+- `DELETE /api/admin/events/{id}` - Delete event
+- `POST /api/admin/banners` - Create banner
+- Dan lainnya...
 
 ## 🔧 Configuration
 
-### **Mail Configuration**
-- Default: Brevo API
-- Alternative: SMTP, Resend, Postmark
+### **API Base URL**
 
-### **Storage Configuration**
-- Local storage: `storage/app/public`
-- Public storage: `public/storage` (symlink)
+Frontend menggunakan relative path `/api` karena sekarang di-serve dari domain yang sama dengan backend. Ini menghilangkan masalah CORS.
 
-## 📝 Models
+Untuk development dengan hot reload, frontend akan proxy ke `http://localhost:8000/api`.
 
-### **Main Models**
-- `User`, `Admin`, `Petugas`
-- `Post`, `Kategori`, `Galery`, `Foto`
-- `Profile`, `Testimonial`
-- `Like`, `Bookmark`, `Comment`, `Download`
+### **CORS**
 
-## 🧪 Testing
-
-```bash
-php artisan test
-```
-
-## 📦 Services
-
-### **BrevoMailService**
-- Send OTP emails via Brevo API
-- Handle email verification
-- Error handling and logging
-
-## 🔒 Security
-
-### **Authentication Guards**
-- `user` - User authentication
-- `admin` - Admin authentication
-- `petugas` - Petugas authentication
-
-### **HTTPS**
-- Force HTTPS in production
-- Secure cookies enabled
-- Trust proxies for Railway/Heroku
+CORS sudah dikonfigurasi di `config/cors.php` untuk allow origins:
+- Local development: `http://localhost:3000`, `http://127.0.0.1:3000`
+- Production: Railway subdomains (auto-detect)
 
 ## 🚀 Deployment
 
-### **Production Setup**
-1. Set `APP_ENV=production`
-2. Set `APP_DEBUG=false`
-3. Set `APP_URL=https://your-domain.com`
-4. Configure database
-5. Configure email service
-6. Run migrations
-7. Set up storage symlink
-8. Clear cache: `php artisan config:clear`
+### **Railway Deployment**
+
+1. Connect repository ke Railway
+2. Set environment variables di Railway:
+   - Database credentials
+   - `BREVO_API_KEY`
+   - `MAIL_FROM_ADDRESS`
+   - `MAIL_FROM_NAME`
+   - `APP_URL` (Railway public domain)
+   - `FRONTEND_URL` (opsional, untuk CORS)
+
+3. Railway akan otomatis:
+   - Install Composer dependencies
+   - Run migrations (jika ada)
+   - Build frontend (tambahkan build command jika perlu)
+
+4. **Build Command untuk Railway:**
+   ```bash
+   cd resources/frontend && npm install && npm run build
+   ```
+
+5. **Start Command:**
+   ```bash
+   php artisan serve --host=0.0.0.0 --port=$PORT
+   ```
+
+### **Manual Deployment**
+
+1. Clone repository
+2. Install dependencies:
+   ```bash
+   composer install --optimize-autoloader --no-dev
+   cd resources/frontend && npm install && npm run build && cd ../..
+   ```
+3. Setup environment variables
+4. Run migrations: `php artisan migrate --force`
+5. Optimize: `php artisan config:cache && php artisan route:cache`
+6. Setup web server (Nginx/Apache) atau gunakan `php artisan serve`
+
+## 📝 Notes
+
+- Frontend dan backend sekarang dalam satu repository (monorepo)
+- Frontend di-build ke `public/` folder dan di-serve sebagai static files
+- API routes tetap di `/api/*`
+- Tidak perlu environment variable `REACT_APP_API_URL` karena menggunakan relative path
+- CORS issues sudah terselesaikan karena frontend dan backend di domain yang sama
 
 ## 📄 License
 
 MIT License
-
