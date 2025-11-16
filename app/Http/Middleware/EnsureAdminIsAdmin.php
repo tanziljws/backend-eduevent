@@ -49,29 +49,69 @@ class EnsureAdminIsAdmin
                         'tokenable_id' => $token->tokenable_id,
                     ]);
                     
-                    // Check if token belongs to Admin model
-                    // Use both direct comparison and string comparison for compatibility
-                    if ($token->tokenable_type === $adminClassName || $token->tokenable_type === 'App\\Models\\Admin') {
+                    // Check if token belongs to Admin model OR User model with role='admin' (fallback)
+                    $userClassName = \App\Models\User::class;
+                    $isAdminModel = ($token->tokenable_type === $adminClassName || $token->tokenable_type === 'App\\Models\\Admin');
+                    $isUserModel = ($token->tokenable_type === $userClassName || $token->tokenable_type === 'App\\Models\\User');
+                    
+                    if ($isAdminModel || $isUserModel) {
                         try {
-                            $admin = $token->tokenable;
+                            $tokenable = $token->tokenable;
                             
-                            // Double check it's actually an Admin instance
-                            if (!($admin instanceof \App\Models\Admin)) {
-                                Log::warning('Token tokenable_type is Admin but instance is not Admin', [
-                                    'tokenable_type' => $token->tokenable_type,
-                                    'tokenable_class' => get_class($admin),
-                                    'tokenable_id' => $token->tokenable_id,
+                            // If it's User model, check if role is 'admin'
+                            if ($isUserModel) {
+                                if (!($tokenable instanceof \App\Models\User)) {
+                                    Log::warning('Token tokenable_type is User but instance is not User', [
+                                        'tokenable_type' => $token->tokenable_type,
+                                        'tokenable_class' => get_class($tokenable),
+                                        'tokenable_id' => $token->tokenable_id,
+                                    ]);
+                                    return response()->json([
+                                        'success' => false,
+                                        'message' => 'Forbidden. Admin access required. Please login as admin.',
+                                    ], 403);
+                                }
+                                
+                                // Check if user has admin role
+                                if (!Schema::hasColumn('users', 'role') || $tokenable->role !== 'admin') {
+                                    Log::warning('User token used but user does not have admin role', [
+                                        'user_id' => $tokenable->id,
+                                        'email' => $tokenable->email,
+                                        'role' => $tokenable->role ?? 'N/A',
+                                    ]);
+                                    return response()->json([
+                                        'success' => false,
+                                        'message' => 'Forbidden. Admin access required. Please login as admin.',
+                                    ], 403);
+                                }
+                                
+                                // User with admin role is valid - treat as admin
+                                $admin = $tokenable;
+                                Log::info('Admin authenticated successfully (via User model with admin role)', [
+                                    'admin_id' => $admin->id,
+                                    'email' => $admin->email,
+                                    'role' => $admin->role,
                                 ]);
-                                return response()->json([
-                                    'success' => false,
-                                    'message' => 'Forbidden. Admin access required. Please login as admin.',
-                                ], 403);
+                            } else {
+                                // It's Admin model
+                                if (!($tokenable instanceof \App\Models\Admin)) {
+                                    Log::warning('Token tokenable_type is Admin but instance is not Admin', [
+                                        'tokenable_type' => $token->tokenable_type,
+                                        'tokenable_class' => get_class($tokenable),
+                                        'tokenable_id' => $token->tokenable_id,
+                                    ]);
+                                    return response()->json([
+                                        'success' => false,
+                                        'message' => 'Forbidden. Admin access required. Please login as admin.',
+                                    ], 403);
+                                }
+                                
+                                $admin = $tokenable;
+                                Log::info('Admin authenticated successfully (via Admin model)', [
+                                    'admin_id' => $admin->id,
+                                    'email' => $admin->email,
+                                ]);
                             }
-                            
-                            Log::info('Admin authenticated successfully', [
-                                'admin_id' => $admin->id,
-                                'email' => $admin->email,
-                            ]);
                         } catch (\Exception $e) {
                             Log::error('Error loading admin from token', [
                                 'error' => $e->getMessage(),
@@ -135,11 +175,25 @@ class EnsureAdminIsAdmin
         }
 
         // Check if admin is authenticated
-        if (!$admin || !($admin instanceof \App\Models\Admin)) {
+        // Accept both Admin model and User model with role='admin'
+        $isValidAdmin = false;
+        if ($admin) {
+            if ($admin instanceof \App\Models\Admin) {
+                $isValidAdmin = true;
+            } elseif ($admin instanceof \App\Models\User) {
+                // Check if user has admin role
+                if (Schema::hasColumn('users', 'role') && $admin->role === 'admin') {
+                    $isValidAdmin = true;
+                }
+            }
+        }
+        
+        if (!$isValidAdmin) {
             Log::warning('Admin middleware: no valid admin authenticated', [
                 'has_bearer_token' => !empty($bearerToken),
                 'has_admin' => !is_null($admin),
                 'admin_type' => $admin ? get_class($admin) : null,
+                'admin_role' => ($admin instanceof \App\Models\User) ? ($admin->role ?? 'N/A') : 'N/A',
             ]);
             return response()->json([
                 'success' => false,
@@ -148,6 +202,7 @@ class EnsureAdminIsAdmin
                     'has_bearer_token' => !empty($bearerToken),
                     'has_admin' => !is_null($admin),
                     'admin_type' => $admin ? get_class($admin) : null,
+                    'admin_role' => ($admin instanceof \App\Models\User) ? ($admin->role ?? 'N/A') : 'N/A',
                 ] : null,
             ], 403);
         }

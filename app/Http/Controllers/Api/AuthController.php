@@ -416,35 +416,52 @@ class AuthController extends Controller
                 'password' => 'required|string',
             ]);
 
-            // Check if admins table exists
-            if (!Schema::hasTable('admins')) {
-                Log::error('Admin login attempted but admins table does not exist');
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Admin system not configured. Please run migrations.',
-                    'error' => config('app.debug') ? 'Table "admins" does not exist' : null,
-                ], 500);
-            }
-
             $email = strtolower(trim($request->email));
+            $admin = null;
+            $isUserModel = false;
             
-            try {
-                $admin = Admin::where('email', $email)->first();
-            } catch (\Exception $e) {
-                Log::error('Error querying admin table', [
-                    'error' => $e->getMessage(),
-                    'email' => $email,
-                ]);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Database error. Please contact administrator.',
-                    'error' => config('app.debug') ? $e->getMessage() : null,
-                ], 500);
+            // Check if admins table exists
+            if (Schema::hasTable('admins')) {
+                // Try to find admin in admins table
+                try {
+                    $admin = Admin::where('email', $email)->first();
+                } catch (\Exception $e) {
+                    Log::error('Error querying admin table', [
+                        'error' => $e->getMessage(),
+                        'email' => $email,
+                    ]);
+                    // Fall through to users table fallback
+                }
+            }
+            
+            // Fallback: If admins table doesn't exist or admin not found, check users table with role='admin'
+            if (!$admin && Schema::hasTable('users') && Schema::hasColumn('users', 'role')) {
+                try {
+                    $userAdmin = User::where('email', $email)
+                        ->where('role', 'admin')
+                        ->first();
+                    
+                    if ($userAdmin) {
+                        Log::info('Admin login using users table fallback (admins table not available)', [
+                            'email' => $email,
+                            'user_id' => $userAdmin->id,
+                        ]);
+                        $admin = $userAdmin;
+                        $isUserModel = true;
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Error querying users table for admin fallback', [
+                        'error' => $e->getMessage(),
+                        'email' => $email,
+                    ]);
+                }
             }
 
             if (!$admin) {
                 Log::warning('Admin login attempted with non-existent email', [
                     'email' => $email,
+                    'admins_table_exists' => Schema::hasTable('admins'),
+                    'users_table_exists' => Schema::hasTable('users'),
                 ]);
                 return response()->json([
                     'success' => false,
@@ -474,11 +491,14 @@ class AuthController extends Controller
                     'email' => $admin->email,
                     'token_id' => $tokenResult->accessToken->id,
                     'tokenable_type' => $tokenResult->accessToken->tokenable_type,
+                    'is_user_model' => $isUserModel,
+                    'model_class' => get_class($admin),
                 ]);
             } catch (\Exception $e) {
                 Log::error('Error creating admin token', [
                     'error' => $e->getMessage(),
                     'admin_id' => $admin->id,
+                    'is_user_model' => $isUserModel,
                 ]);
                 return response()->json([
                     'success' => false,
