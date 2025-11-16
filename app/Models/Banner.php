@@ -18,14 +18,12 @@ class Banner extends Model
         'link_url',
         'order',
         'is_active',
-        'start_date',
-        'end_date',
+        // Removed start_date and end_date - columns don't exist in Railway database
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
-        'start_date' => 'datetime',
-        'end_date' => 'datetime',
+        // Removed start_date and end_date casts - columns don't exist in Railway database
     ];
 
     // Accessors
