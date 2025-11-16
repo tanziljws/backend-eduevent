@@ -670,12 +670,29 @@ class EventController extends Controller
         try {
             $data = $request->except(['flyer', 'certificate_template']);
             $admin = $request->user();
-            if ($admin instanceof \App\Models\Admin) {
-                $data['created_by'] = $admin->id;
-            } else {
-                // Fallback for non-admin (should not happen but handle gracefully)
-                $data['created_by'] = null;
+            
+            // Handle created_by field - check if column exists and if it's nullable
+            if (Schema::hasColumn('events', 'created_by')) {
+                $isCreatedByNullable = Schema::getColumnType('events', 'created_by') !== 'bigint' || 
+                    (Schema::getConnection()->getDoctrineColumn('events', 'created_by')->getNotnull() === false);
+                
+                if ($admin instanceof \App\Models\Admin) {
+                    $data['created_by'] = $admin->id;
+                } elseif ($admin instanceof \App\Models\User && $admin->role === 'admin') {
+                    // Fallback: if using User with admin role, try to find or use default admin ID
+                    if (Schema::hasTable('admins')) {
+                        $defaultAdmin = \App\Models\Admin::first();
+                        $data['created_by'] = $defaultAdmin ? $defaultAdmin->id : ($isCreatedByNullable ? null : 1);
+                    } else {
+                        // If admins table doesn't exist, check if created_by can be null
+                        $data['created_by'] = $isCreatedByNullable ? null : 1; // Fallback to 1 if NOT NULL
+                    }
+                } else {
+                    // No admin found - set based on nullable status
+                    $data['created_by'] = $isCreatedByNullable ? null : 1; // Fallback to 1 if NOT NULL
+                }
             }
+            
             $data['is_published'] = $request->boolean('is_published', false);
             $data['is_free'] = $request->boolean('is_free', true);
 
@@ -695,14 +712,37 @@ class EventController extends Controller
 
             DB::commit();
 
+            // Load creator relationship only if created_by exists and admins table exists
+            $eventData = $event->toArray();
+            if (Schema::hasTable('admins') && $event->created_by && Schema::hasColumn('events', 'created_by')) {
+                try {
+                    $event->load('creator');
+                    $eventData = $event->toArray();
+                } catch (\Exception $e) {
+                    // Ignore relationship loading errors
+                    \Log::warning('Error loading creator relationship: ' . $e->getMessage());
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Event berhasil dibuat.',
-                'event' => $event->load('creator'),
+                'event' => $eventData,
             ], 201);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Data tidak valid.',
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Error creating event: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'data' => $data ?? null,
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal membuat event.',
