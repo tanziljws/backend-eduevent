@@ -41,7 +41,7 @@ class AdminController extends Controller
         
         if (Schema::hasTable('payments')) {
             try {
-                $totalRevenue = \App\Models\Payment::where('status', 'paid')
+                $totalRevenue = Payment::where('status', 'paid')
                     ->sum('amount') ?? 0;
                 // For now, split 70% admin, 30% panitia (can be configured later)
                 $adminRevenue = $totalRevenue * 0.7;
@@ -115,12 +115,13 @@ class AdminController extends Controller
 
         // Top events (by registration count)
         $topEvents = Event::select('events.*', DB::raw('COUNT(registrations.id) as registration_count'))
-            ->leftJoin('registrations', 'events.id', '=', 'registrations.event_id')
-            ->where(function($query) {
-                $query->where('registrations.status', '!=', 'cancelled')
-                      ->orWhereNull('registrations.status');
+            ->leftJoin('registrations', function($join) {
+                $join->on('events.id', '=', 'registrations.event_id')
+                     ->where(function($query) {
+                         $query->where('registrations.status', '!=', 'cancelled')
+                               ->orWhereNull('registrations.status');
+                     });
             })
-            ->orWhereNull('registrations.id')
             ->groupBy('events.id')
             ->orderBy('registration_count', 'desc')
             ->take(10)
