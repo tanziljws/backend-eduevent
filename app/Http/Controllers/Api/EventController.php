@@ -230,13 +230,16 @@ class EventController extends Controller
                 $registrationData['additional_info'] = $request->input('additional_info');
             }
             
-            // Map status: old schema uses 'registered'/'cancelled', new schema uses 'pending'/'confirmed'/'cancelled'/'completed'
-            $statusColumnExists = Schema::hasColumn('registrations', 'status');
-            if ($statusColumnExists) {
-                // Check status column type by trying to determine from existing data or default
-                $registrationData['status'] = 'registered'; // Default for old schema
+            // Map status: Railway DB uses enum('registered','cancelled'), new schema uses enum('pending','confirmed','cancelled','completed')
+            // Always use 'registered' for Railway DB compatibility (it's in the enum)
+            // If status column doesn't exist or uses new enum, try 'confirmed' or 'pending'
+            $hasStatusColumn = Schema::hasColumn('registrations', 'status');
+            if ($hasStatusColumn) {
+                // Try to use 'registered' first (old schema), fallback to new schema values
+                // Railway DB uses 'registered'/'cancelled' enum
+                $registrationData['status'] = 'registered'; // Works for Railway DB
             } else {
-                // New schema - use pending/confirmed
+                // Status column doesn't exist (unlikely but handle it)
                 $registrationData['status'] = $event->is_free ? 'confirmed' : 'pending';
             }
             

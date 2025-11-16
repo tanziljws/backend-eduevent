@@ -22,6 +22,16 @@ class EventRegistration extends Model
         'confirmed_at',
         'cancelled_at',
         'attendance_token',
+        // Old schema fields (from database import)
+        'name',
+        'email',
+        'phone',
+        'motivation',
+        'token_hash',
+        'token_plain',
+        'token_sent_at',
+        'attendance_status',
+        'attended_at',
     ];
 
     protected $casts = [
