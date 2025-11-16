@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Hash;
 use App\Services\BrevoMailService;
 use Carbon\Carbon;
 
@@ -180,15 +182,73 @@ class EventController extends Controller
             // Generate 10-digit attendance token
             $attendanceToken = strtoupper(substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'), 0, 10));
             
-            $registration = EventRegistration::create([
+            // Prepare registration data based on table schema
+            $registrationData = [
                 'event_id' => $id,
                 'user_id' => $user->id,
-                'status' => $event->is_free ? 'confirmed' : 'pending',
-                'additional_info' => $request->input('additional_info'),
-                'registered_at' => now(),
-                'confirmed_at' => $event->is_free ? now() : null,
                 'attendance_token' => $attendanceToken,
-            ]);
+            ];
+            
+            // Check which columns exist in the registrations table
+            $hasNameColumn = Schema::hasColumn('registrations', 'name');
+            $hasEmailColumn = Schema::hasColumn('registrations', 'email');
+            $hasPhoneColumn = Schema::hasColumn('registrations', 'phone');
+            $hasTokenHashColumn = Schema::hasColumn('registrations', 'token_hash');
+            $hasTokenPlainColumn = Schema::hasColumn('registrations', 'token_plain');
+            $hasTokenSentAtColumn = Schema::hasColumn('registrations', 'token_sent_at');
+            $hasMotivationColumn = Schema::hasColumn('registrations', 'motivation');
+            $hasAdditionalInfoColumn = Schema::hasColumn('registrations', 'additional_info');
+            $hasRegisteredAtColumn = Schema::hasColumn('registrations', 'registered_at');
+            $hasConfirmedAtColumn = Schema::hasColumn('registrations', 'confirmed_at');
+            
+            // Set name, email, phone if columns exist (required by old schema)
+            if ($hasNameColumn) {
+                $registrationData['name'] = $user->name ?? '';
+            }
+            if ($hasEmailColumn) {
+                $registrationData['email'] = $user->email ?? '';
+            }
+            if ($hasPhoneColumn) {
+                $registrationData['phone'] = $user->phone ?? '-';
+            }
+            
+            // Set token_hash and token_plain if columns exist (required by old schema)
+            if ($hasTokenHashColumn) {
+                $registrationData['token_hash'] = Hash::make($attendanceToken);
+            }
+            if ($hasTokenPlainColumn) {
+                $registrationData['token_plain'] = $attendanceToken;
+            }
+            if ($hasTokenSentAtColumn) {
+                $registrationData['token_sent_at'] = now();
+            }
+            
+            // Set motivation/additional_info if column exists
+            if ($hasMotivationColumn) {
+                $registrationData['motivation'] = $request->input('additional_info') ?? $request->input('motivation');
+            } elseif ($hasAdditionalInfoColumn) {
+                $registrationData['additional_info'] = $request->input('additional_info');
+            }
+            
+            // Map status: old schema uses 'registered'/'cancelled', new schema uses 'pending'/'confirmed'/'cancelled'/'completed'
+            $statusColumnExists = Schema::hasColumn('registrations', 'status');
+            if ($statusColumnExists) {
+                // Check status column type by trying to determine from existing data or default
+                $registrationData['status'] = 'registered'; // Default for old schema
+            } else {
+                // New schema - use pending/confirmed
+                $registrationData['status'] = $event->is_free ? 'confirmed' : 'pending';
+            }
+            
+            // Set registered_at and confirmed_at if columns exist (new schema)
+            if ($hasRegisteredAtColumn) {
+                $registrationData['registered_at'] = now();
+            }
+            if ($hasConfirmedAtColumn) {
+                $registrationData['confirmed_at'] = $event->is_free ? now() : null;
+            }
+            
+            $registration = EventRegistration::create($registrationData);
 
             // If paid event, create pending payment
             if (!$event->is_free) {
