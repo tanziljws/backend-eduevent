@@ -432,38 +432,122 @@ class EventController extends Controller
             ]);
         }
 
-        $attendance = Attendance::where('event_id', $id)
-            ->where('user_id', $user->id)
-            ->where('registration_id', $registration->id)
-            ->first();
+        // Try to find attendance - handle both old and new schema
+        $attendance = null;
+        try {
+            $attendance = Attendance::where('event_id', $id)
+                ->where('user_id', $user->id)
+                ->where('registration_id', $registration->id)
+                ->first();
+        } catch (\Exception $e) {
+            // If attendance table doesn't exist or has issues, continue without it
+            Log::warning('Error fetching attendance', [
+                'error' => $e->getMessage(),
+                'event_id' => $id,
+                'user_id' => $user->id,
+                'registration_id' => $registration->id,
+            ]);
+        }
 
         // Check if attendance window is open (event date/time logic)
-        $now = Carbon::now();
-        $eventDate = Carbon::parse($event->event_date);
-        $startTime = $event->start_time ? Carbon::parse($event->event_date . ' ' . $event->start_time) : $eventDate->copy()->setTime(0, 0);
-        $endTime = $event->end_time ? Carbon::parse($event->event_date . ' ' . $event->end_time) : $startTime->copy()->addHours(8);
+        try {
+            $now = Carbon::now();
+            $eventDate = Carbon::parse($event->event_date);
+            
+            // Parse start_time safely
+            $startTime = null;
+            if ($event->start_time) {
+                try {
+                    if (is_string($event->start_time)) {
+                        $startTime = Carbon::parse($event->event_date . ' ' . $event->start_time);
+                    } else {
+                        $startTime = Carbon::parse($event->event_date . ' ' . $event->start_time->format('H:i:s'));
+                    }
+                } catch (\Exception $e) {
+                    $startTime = $eventDate->copy()->setTime(0, 0);
+                }
+            } else {
+                $startTime = $eventDate->copy()->setTime(0, 0);
+            }
+            
+            // Parse end_time safely
+            $endTime = null;
+            if ($event->end_time) {
+                try {
+                    if (is_string($event->end_time)) {
+                        $endTime = Carbon::parse($event->event_date . ' ' . $event->end_time);
+                    } else {
+                        $endTime = Carbon::parse($event->event_date . ' ' . $event->end_time->format('H:i:s'));
+                    }
+                } catch (\Exception $e) {
+                    $endTime = $startTime->copy()->addHours(8);
+                }
+            } else {
+                $endTime = $startTime->copy()->addHours(8);
+            }
+            
+            // Allow attendance 30 minutes before event starts until event ends
+            $attendanceOpenTime = $startTime->copy()->subMinutes(30);
+            $isAttendanceOpen = $now->greaterThanOrEqualTo($attendanceOpenTime) && $now->lessThanOrEqualTo($endTime);
+            $isEventPassed = $now->greaterThan($endTime);
+        } catch (\Exception $e) {
+            Log::error('Error calculating attendance window', [
+                'error' => $e->getMessage(),
+                'event_id' => $id,
+            ]);
+            // Default to closed if calculation fails
+            $isAttendanceOpen = false;
+            $isEventPassed = false;
+        }
+
+        // Check registration status - Railway DB uses 'registered'/'cancelled', new schema uses 'pending'/'confirmed'/'cancelled'/'completed'
+        $isRegistrationConfirmed = in_array($registration->status, ['confirmed', 'registered', 'completed']);
         
-        // Allow attendance 30 minutes before event starts until event ends
-        $attendanceOpenTime = $startTime->copy()->subMinutes(30);
-        $isAttendanceOpen = $now->greaterThanOrEqualTo($attendanceOpenTime) && $now->lessThanOrEqualTo($endTime);
-        $isEventPassed = $now->greaterThan($endTime);
+        // Format start_time safely for response
+        $startTimeFormatted = null;
+        try {
+            if ($event->start_time) {
+                if (is_string($event->start_time)) {
+                    // Try to parse and format
+                    $timeParts = explode(':', $event->start_time);
+                    if (count($timeParts) >= 2) {
+                        $startTimeFormatted = $timeParts[0] . ':' . $timeParts[1];
+                    } else {
+                        $startTimeFormatted = $event->start_time;
+                    }
+                } else {
+                    $startTimeFormatted = $event->start_time->format('H:i');
+                }
+            }
+        } catch (\Exception $e) {
+            $startTimeFormatted = null;
+        }
 
         return response()->json([
             'success' => true,
-            'can_attend' => $registration->status === 'confirmed' && !$attendance && $isAttendanceOpen,
+            'can_attend' => $isRegistrationConfirmed && !$attendance && ($isAttendanceOpen ?? false),
             'has_attended' => (bool) $attendance,
-            'active' => $isAttendanceOpen,
-            'is_event_passed' => $isEventPassed,
-            'message' => $isEventPassed 
+            'active' => $isAttendanceOpen ?? false,
+            'is_event_passed' => $isEventPassed ?? false,
+            'message' => ($isEventPassed ?? false)
                 ? 'Daftar hadir sudah ditutup' 
-                : ($isAttendanceOpen 
+                : (($isAttendanceOpen ?? false)
                     ? 'Daftar hadir sedang dibuka' 
                     : 'Daftar hadir belum dibuka'),
-            'event_date' => $event->event_date?->format('d F Y'),
-            'start_time' => $event->start_time?->format('H:i'),
-            'current_time' => $now->toISOString(),
-            'attendance' => $attendance,
-            'registration' => $registration,
+            'event_date' => $event->event_date ? Carbon::parse($event->event_date)->format('d F Y') : null,
+            'start_time' => $startTimeFormatted,
+            'current_time' => $now->toISOString() ?? Carbon::now()->toISOString(),
+            'attendance' => $attendance ? [
+                'id' => $attendance->id,
+                'status' => $attendance->status ?? null,
+                'checked_in_at' => $attendance->checked_in_at ?? null,
+            ] : null,
+            'registration' => [
+                'id' => $registration->id,
+                'status' => $registration->status,
+                'event_id' => $registration->event_id,
+                'user_id' => $registration->user_id,
+            ],
         ]);
     }
 
