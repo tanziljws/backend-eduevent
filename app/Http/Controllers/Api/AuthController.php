@@ -455,6 +455,12 @@ class AuthController extends Controller
      */
     protected function generateUsernameFromEmail(string $email): string
     {
+        // Check if username column exists
+        if (!Schema::hasColumn('users', 'username')) {
+            // Return empty string if column doesn't exist
+            return '';
+        }
+        
         // Extract username part before @
         $baseUsername = explode('@', $email)[0];
         
