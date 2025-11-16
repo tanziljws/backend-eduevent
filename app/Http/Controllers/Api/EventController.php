@@ -60,8 +60,8 @@ class EventController extends Controller
                 break;
         }
 
-        // Paginate
-        $perPage = $request->get('per_page', 12);
+        // Paginate - default to 50 to show more events
+        $perPage = min($request->get('per_page', 50), 100); // Max 100 per page
         $events = $query->with(['creator'])->paginate($perPage);
 
         // Format response
