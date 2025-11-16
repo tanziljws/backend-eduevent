@@ -63,6 +63,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Wishlist routes
+    Route::get('/wishlist/check/{id}', [UserController::class, 'checkWishlist']);
     Route::post('/events/{id}/wishlist', [UserController::class, 'toggleWishlist']);
     Route::get('/wishlist', [UserController::class, 'wishlist']);
 

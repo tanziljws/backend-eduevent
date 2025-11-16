@@ -432,6 +432,23 @@ class UserController extends Controller
     }
 
     /**
+     * Check if event is in wishlist
+     */
+    public function checkWishlist(Request $request, $eventId)
+    {
+        $user = $request->user();
+        
+        $wishlist = \App\Models\Wishlist::where('user_id', $user->id)
+            ->where('event_id', $eventId)
+            ->exists();
+
+        return response()->json([
+            'success' => true,
+            'is_wishlisted' => $wishlist,
+        ]);
+    }
+
+    /**
      * Toggle wishlist (add/remove event from wishlist)
      */
     public function toggleWishlist(Request $request, $eventId)
