@@ -23,12 +23,30 @@ class AdminController extends Controller
     {
         $year = $request->get('year', date('Y'));
 
-        // Calculate stats
-        $totalEvents = Event::count();
-        $publishedEvents = Event::where('is_published', true)->count();
-        $totalRegistrations = EventRegistration::where('status', '!=', 'cancelled')->count();
-        $totalAttendances = Attendance::count();
-        $totalAttendees = Attendance::where('status', 'present')->count();
+        // Calculate stats with logging for debugging
+        try {
+            $totalEvents = Event::count();
+            $publishedEvents = Event::where('is_published', true)->count();
+            $totalRegistrations = EventRegistration::where('status', '!=', 'cancelled')->count();
+            $totalAttendances = Attendance::count();
+            $totalAttendees = Attendance::where('status', 'present')->count();
+            
+            Log::info('Dashboard stats calculated', [
+                'total_events' => $totalEvents,
+                'published_events' => $publishedEvents,
+                'total_registrations' => $totalRegistrations,
+                'total_attendances' => $totalAttendances,
+                'total_attendees' => $totalAttendees,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error calculating dashboard stats: ' . $e->getMessage());
+            // Set defaults on error
+            $totalEvents = 0;
+            $publishedEvents = 0;
+            $totalRegistrations = 0;
+            $totalAttendances = 0;
+            $totalAttendees = 0;
+        }
         
         // Calculate attendance rate
         $attendanceRate = 0;
@@ -136,7 +154,7 @@ class AdminController extends Controller
                 ];
             });
 
-        return response()->json([
+        $response = [
             'success' => true,
             'statistics' => $stats, // Changed from 'stats' to 'statistics' for frontend compatibility
             'stats' => $stats, // Keep for backward compatibility
@@ -145,7 +163,19 @@ class AdminController extends Controller
             'monthly_events' => $monthlyEventsData,
             'monthly_attendees' => $monthlyAttendeesData,
             'top_events' => $topEvents,
+        ];
+        
+        // Log response for debugging (without sensitive data)
+        Log::info('Dashboard response', [
+            'statistics' => $stats,
+            'recent_events_count' => count($recentEvents),
+            'upcoming_events_count' => count($upcomingEvents),
+            'monthly_events_count' => count($monthlyEventsData),
+            'monthly_attendees_count' => count($monthlyAttendeesData),
+            'top_events_count' => count($topEvents),
         ]);
+        
+        return response()->json($response);
     }
 
     /**
