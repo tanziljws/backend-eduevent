@@ -201,7 +201,7 @@ class EventController extends Controller
             $hasRegisteredAtColumn = Schema::hasColumn('registrations', 'registered_at');
             $hasConfirmedAtColumn = Schema::hasColumn('registrations', 'confirmed_at');
             
-            // Set name, email, phone if columns exist (required by old schema)
+            // Set name, email, phone if columns exist (required by old schema - these are NOT NULL)
             if ($hasNameColumn) {
                 $registrationData['name'] = $user->name ?? '';
             }
@@ -209,7 +209,8 @@ class EventController extends Controller
                 $registrationData['email'] = $user->email ?? '';
             }
             if ($hasPhoneColumn) {
-                $registrationData['phone'] = $user->phone ?? '-';
+                // Phone is NOT NULL in old schema, so provide default value
+                $registrationData['phone'] = !empty($user->phone) ? $user->phone : '-';
             }
             
             // Set token_hash and token_plain if columns exist (required by old schema)
