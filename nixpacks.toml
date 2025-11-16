@@ -1,5 +1,10 @@
 [phases.setup]
 nixPkgs = ["nodejs-18_x", "php82"]
+cmds = [
+  "curl -sS https://getcomposer.org/installer | php",
+  "mv composer.phar /usr/local/bin/composer",
+  "chmod +x /usr/local/bin/composer"
+]
 
 [phases.install]
 cmds = [
