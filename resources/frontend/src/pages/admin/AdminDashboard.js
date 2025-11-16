@@ -55,7 +55,7 @@ const AdminDashboard = () => {
       if (res && res.fallback) return;
     } catch (error) {
       console.error('Export error:', error);
-      const directUrl = `http://localhost:8000/api/admin/export?type=${type}&format=${format}`;
+      const directUrl = `/api/admin/export?type=${type}&format=${format}`;
       try {
         window.open(directUrl, '_blank');
         return;

@@ -37,13 +37,22 @@ const AdminParticipants = () => {
   const fetchParticipants = async () => {
     try {
       setLoading(true);
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      
+      const headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       
       // Fetch participants data
-      const participantsResponse = await fetch('http://localhost:8000/api/admin/participants');
+      const participantsResponse = await fetch('/api/admin/participants', { headers });
       const participantsData = await participantsResponse.json();
       
       // Fetch statistics
-      const statsResponse = await fetch('http://localhost:8000/api/admin/participants/statistics');
+      const statsResponse = await fetch('/api/admin/participants/statistics', { headers });
       const statsData = await statsResponse.json();
       
       console.log('Participants data:', participantsData);

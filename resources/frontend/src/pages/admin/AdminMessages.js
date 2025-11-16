@@ -23,9 +23,9 @@ function AdminMessages() {
   const fetchMessages = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
       
-      let url = `http://127.0.0.1:8000/api/admin/messages?page=${currentPage}`;
+      let url = `/api/admin/messages?page=${currentPage}`;
       if (filter !== 'all') url += `&status=${filter}`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
 
@@ -63,14 +63,14 @@ function AdminMessages() {
 
   const handleMarkAsRead = async (id) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
       const headers = {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
       };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       
-      const response = await fetch(`http://127.0.0.1:8000/api/admin/messages/${id}/mark-read`, {
+      const response = await fetch(`/api/admin/messages/${id}/mark-read`, {
         method: 'POST',
         headers
       });
@@ -87,14 +87,14 @@ function AdminMessages() {
     if (!window.confirm('Yakin ingin menghapus pesan ini?')) return;
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
       const headers = {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
       };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       
-      const response = await fetch(`http://127.0.0.1:8000/api/admin/messages/${id}`, {
+      const response = await fetch(`/api/admin/messages/${id}`, {
         method: 'DELETE',
         headers
       });
