@@ -1,0 +1,400 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Models\Admin;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use App\Services\BrevoMailService;
+use Carbon\Carbon;
+
+class AuthController extends Controller
+{
+    /**
+     * Register new user
+     */
+    public function register(Request $request)
+    {
+        $email = strtolower(trim($request->email));
+        
+        // Cleanup unverified users with the same email BEFORE validation (zombie database cleanup)
+        $existingUnverifiedUser = User::where('email', $email)
+            ->where('is_verified', false)
+            ->first();
+        
+        if ($existingUnverifiedUser) {
+            // Delete unverified user to allow re-registration
+            // We delete regardless of OTP expiry to allow user to re-register anytime
+            Log::info('Deleting unverified user to allow re-registration', [
+                'user_id' => $existingUnverifiedUser->id,
+                'email' => $email,
+                'created_at' => $existingUnverifiedUser->created_at,
+                'otp_expires_at' => $existingUnverifiedUser->otp_expires_at,
+                'is_expired' => $existingUnverifiedUser->otp_expires_at 
+                    ? Carbon::now()->greaterThan($existingUnverifiedUser->otp_expires_at) 
+                    : true,
+            ]);
+            $existingUnverifiedUser->delete();
+        }
+        
+        // Validate after cleanup
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'username' => 'nullable|string|max:50|unique:users,username',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:6|confirmed',
+            'phone' => 'nullable|string|max:20',
+        ]);
+
+        try {
+            
+            // Generate username from email if not provided
+            $username = $request->username 
+                ? trim($request->username) 
+                : $this->generateUsernameFromEmail($email);
+
+            $user = User::create([
+                'name' => trim($request->name),
+                'username' => $username,
+                'email' => $email,
+                'phone' => $request->phone ? trim($request->phone) : null,
+                'password' => $request->password,
+                'is_verified' => false,
+            ]);
+
+            // Generate OTP
+            $otp = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            $user->otp_code = $otp;
+            $user->otp_expires_at = Carbon::now()->addMinutes(10);
+            $user->save();
+
+            // Send OTP email
+            try {
+                $brevoService = new BrevoMailService();
+                $sent = $brevoService->sendOtpEmail($user->email, $otp);
+                if (!$sent) {
+                    Log::warning('Failed to send OTP email via Brevo (returned false)', [
+                        'user_id' => $user->id,
+                        'email' => $user->email
+                    ]);
+                }
+            } catch (\Exception $e) {
+                // Log configuration errors separately
+                if (str_contains($e->getMessage(), 'tidak dikonfigurasi') || 
+                    str_contains($e->getMessage(), 'tidak valid')) {
+                    Log::error('Brevo configuration error during registration', [
+                        'user_id' => $user->id,
+                        'email' => $user->email,
+                        'error' => $e->getMessage()
+                    ]);
+                } else {
+                    Log::error('Failed to send OTP email during registration', [
+                        'user_id' => $user->id,
+                        'email' => $user->email,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+                // Continue anyway - OTP sudah tersimpan, user bisa request resend
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Registrasi berhasil. Silakan cek email untuk kode OTP.',
+                'user_id' => $user->id,
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                ]
+            ], 201);
+
+        } catch (\Exception $e) {
+            Log::error('Registration error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat mendaftar.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify email with OTP
+     */
+    public function verifyEmail(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'code' => 'required|string|size:6',
+        ]);
+
+        $user = User::findOrFail($request->user_id);
+
+        if (!$user->otp_code || !$user->otp_expires_at || Carbon::now()->greaterThan($user->otp_expires_at)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'OTP kedaluwarsa. Silakan kirim ulang.',
+            ], 400);
+        }
+
+        if ($request->code !== $user->otp_code) {
+            return response()->json([
+                'success' => false,
+                'message' => 'OTP tidak valid.',
+            ], 400);
+        }
+
+        // Verify user
+        $user->is_verified = true;
+        if (!$user->email_verified_at) {
+            $user->email_verified_at = Carbon::now();
+        }
+        $user->otp_code = null;
+        $user->otp_expires_at = null;
+        $user->save();
+
+        // Create token
+        $token = $user->createToken('auth-token')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Email berhasil diverifikasi.',
+            'token' => $token,
+            'user' => $user->makeHidden(['password', 'otp_code']),
+        ]);
+    }
+
+    /**
+     * Login user
+     */
+    public function login(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        $email = strtolower(trim($request->email));
+        $user = User::where('email', $email)->first();
+
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email atau password tidak valid.',
+            ], 401);
+        }
+
+        if (!$user->is_verified) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email belum diverifikasi. Silakan verifikasi email terlebih dahulu.',
+            ], 403);
+        }
+
+        // Create token
+        $token = $user->createToken('auth-token')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Login berhasil.',
+            'token' => $token,
+            'user' => $user->makeHidden(['password', 'otp_code']),
+        ]);
+    }
+
+    /**
+     * Request password reset
+     */
+    public function requestReset(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email|exists:users,email',
+        ]);
+
+        $email = strtolower(trim($request->email));
+        $user = User::where('email', $email)->first();
+
+        if (!$user) {
+            // Don't reveal if email exists for security
+            return response()->json([
+                'success' => true,
+                'message' => 'Jika email terdaftar, kode OTP telah dikirim.',
+            ]);
+        }
+
+        // Generate OTP
+        $otp = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $user->otp_code = $otp;
+        $user->otp_expires_at = Carbon::now()->addMinutes(10);
+        $user->save();
+
+        // Send OTP email
+        try {
+            $brevoService = new BrevoMailService();
+            $sent = $brevoService->sendOtpEmail($user->email, $otp);
+            if (!$sent) {
+                Log::warning('Failed to send reset OTP email via Brevo (returned false)', [
+                    'user_id' => $user->id,
+                    'email' => $user->email
+                ]);
+            }
+        } catch (\Exception $e) {
+            // Log configuration errors separately
+            if (str_contains($e->getMessage(), 'tidak dikonfigurasi') || 
+                str_contains($e->getMessage(), 'tidak valid')) {
+                Log::error('Brevo configuration error during password reset', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'error' => $e->getMessage()
+                ]);
+            } else {
+                Log::error('Failed to send reset OTP email', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'error' => $e->getMessage()
+                ]);
+            }
+            // Continue anyway - OTP sudah tersimpan, user bisa request resend
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Jika email terdaftar, kode OTP telah dikirim.',
+            'user_id' => $user->id,
+        ]);
+    }
+
+    /**
+     * Reset password with OTP
+     */
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'code' => 'required|string|size:6',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $user = User::findOrFail($request->user_id);
+
+        if (!$user->otp_code || !$user->otp_expires_at || Carbon::now()->greaterThan($user->otp_expires_at)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'OTP kedaluwarsa. Silakan kirim ulang.',
+            ], 400);
+        }
+
+        if ($request->code !== $user->otp_code) {
+            return response()->json([
+                'success' => false,
+                'message' => 'OTP tidak valid.',
+            ], 400);
+        }
+
+        // Reset password
+        $user->password = $request->password;
+        $user->otp_code = null;
+        $user->otp_expires_at = null;
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password berhasil direset.',
+        ]);
+    }
+
+    /**
+     * Get current authenticated user
+     */
+    public function user(Request $request)
+    {
+        return response()->json([
+            'success' => true,
+            'user' => $request->user()->makeHidden(['password', 'otp_code']),
+        ]);
+    }
+
+    /**
+     * Login admin
+     */
+    public function loginAdmin(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        $email = strtolower(trim($request->email));
+        $admin = Admin::where('email', $email)->first();
+
+        if (!$admin || !Hash::check($request->password, $admin->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email atau password tidak valid.',
+            ], 401);
+        }
+
+        // Create token
+        $token = $admin->createToken('admin-auth-token')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Login berhasil.',
+            'token' => $token,
+            'user' => [
+                'id' => $admin->id,
+                'name' => $admin->name,
+                'email' => $admin->email,
+                'role' => 'admin',
+            ],
+        ]);
+    }
+
+    /**
+     * Logout user
+     */
+    public function logout(Request $request)
+    {
+        $request->user()->currentAccessToken()->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Logout berhasil.',
+        ]);
+    }
+
+    /**
+     * Generate unique username from email
+     */
+    protected function generateUsernameFromEmail(string $email): string
+    {
+        // Extract username part before @
+        $baseUsername = explode('@', $email)[0];
+        
+        // Remove special characters, keep only alphanumeric and underscore
+        $baseUsername = preg_replace('/[^a-zA-Z0-9_]/', '', $baseUsername);
+        
+        // Limit to 45 characters (to allow for suffix if needed)
+        $baseUsername = substr($baseUsername, 0, 45);
+        
+        // If empty after cleanup, use default
+        if (empty($baseUsername)) {
+            $baseUsername = 'user';
+        }
+        
+        // Check if username exists, if yes, append number
+        $username = $baseUsername;
+        $counter = 1;
+        while (User::where('username', $username)->exists()) {
+            $suffix = $counter;
+            $maxLength = 50 - strlen((string)$suffix) - 1; // -1 for underscore
+            $username = substr($baseUsername, 0, $maxLength) . '_' . $suffix;
+            $counter++;
+        }
+        
+        return $username;
+    }
+}
