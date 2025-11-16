@@ -136,47 +136,64 @@ function EventRegistration() {
       setIsPaying(true);
       setError(null);
       
-      // If Midtrans is not configured, still create payment but show message
+      // Step 1: Create registration and payment first
+      const res = await eventService.createPayment(event.id);
+      
+      // Step 2: Check if Midtrans is configured and available
       const clientKey = process.env.REACT_APP_MIDTRANS_CLIENT_KEY;
-      if (!clientKey || !window.snap) {
-        // No payment gateway configured - create registration anyway
-        const res = await eventService.createPayment(event.id);
+      if (!clientKey) {
+        // No client key configured - show message and redirect
         setSuccess('Registrasi berhasil dibuat. Pembayaran akan diproses secara manual oleh admin.');
-        // Redirect to event detail or registration success page after delay
         setTimeout(() => {
           navigate(`/events/${id}`);
-        }, 2000);
+        }, 3000);
         return;
       }
       
-      const res = await eventService.createPayment(event.id);
+      // Wait for snap to be available (if not loaded yet)
+      let snapCheckCount = 0;
+      const maxSnapChecks = 20; // 20 checks = ~2 seconds
+      while (!window.snap && snapCheckCount < maxSnapChecks) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        snapCheckCount++;
+      }
+      
       const token = res?.snap_token;
       
+      // Step 3: Open Midtrans payment gateway
       if (token && window.snap) {
+        // Payment gateway ready - open Midtrans Snap
         window.snap.pay(token, {
-          onSuccess: function() {
-            setSuccess('Pembayaran berhasil. Status registrasi akan diperbarui.');
-            // Refresh page after a delay
+          onSuccess: function(result) {
+            setSuccess('Pembayaran berhasil! Status registrasi akan diperbarui.');
+            // Redirect to event detail after payment success
             setTimeout(() => {
-              window.location.reload();
+              window.location.href = `/events/${id}`;
             }, 2000);
           },
-          onPending: function() {
+          onPending: function(result) {
             setSuccess('Pembayaran tertunda. Silakan selesaikan pembayaran Anda.');
-            // Refresh page after a delay
+            // Redirect to event detail after payment pending
             setTimeout(() => {
-              window.location.reload();
+              window.location.href = `/events/${id}`;
             }, 2000);
           },
-          onError: function() {
-            setError('Terjadi kesalahan saat memproses pembayaran.');
+          onError: function(result) {
+            setError('Terjadi kesalahan saat memproses pembayaran. Silakan coba lagi.');
+            setIsPaying(false);
           },
           onClose: function() {
-            // Ditutup tanpa menyelesaikan pembayaran
+            // User closed payment popup without completing payment
+            setError('Pembayaran dibatalkan. Anda dapat melanjutkan pembayaran nanti.');
+            setIsPaying(false);
           }
         });
+      } else if (!window.snap) {
+        // Snap not loaded - fallback message
+        setError('Payment gateway belum siap. Silakan refresh halaman dan coba lagi.');
+        setIsPaying(false);
       } else {
-        // No token or snap not available - still allow registration
+        // No token - fallback message
         setSuccess('Registrasi berhasil dibuat. Silakan hubungi admin untuk pembayaran.');
         setTimeout(() => {
           navigate(`/events/${id}`);
@@ -185,12 +202,8 @@ function EventRegistration() {
     } catch (err) {
       console.error('Payment error:', err);
       // On error, show error message
-      if (err?.response?.status === 404 || err?.response?.status === 400) {
-        setError(err?.response?.data?.message || 'Gagal memulai pembayaran. Silakan coba lagi.');
-      } else {
-        setError(err?.response?.data?.message || 'Gagal memulai pembayaran. Silakan coba lagi.');
-      }
-    } finally {
+      const errorMessage = err?.response?.data?.message || 'Gagal memulai pembayaran. Silakan coba lagi.';
+      setError(errorMessage);
       setIsPaying(false);
     }
   };
