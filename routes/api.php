@@ -107,5 +107,4 @@ Route::prefix('admin')->middleware('admin')->group(function () {
         Route::get('/reports/monthly-attendees', [AdminController::class, 'monthlyAttendees']);
         Route::get('/reports/top10-events', [AdminController::class, 'topEvents']);
         Route::get('/events/{id}/export', [AdminController::class, 'exportEventParticipants']);
-    });
 });
