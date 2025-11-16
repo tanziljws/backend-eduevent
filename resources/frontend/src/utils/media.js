@@ -10,7 +10,13 @@ import { API_BASE_URL } from '../config/api';
 // Derive backend origin by stripping trailing '/api' from API_BASE_URL
 function getBackendOrigin() {
   try {
-    const url = new URL(API_BASE_URL);
+    // If API_BASE_URL is relative (starts with /), use same origin
+    if (API_BASE_URL.startsWith('/')) {
+      return window.location.origin || '';
+    }
+    
+    // Try to parse as absolute URL
+    const url = new URL(API_BASE_URL, window.location.origin);
     // If baseURL includes '/api' path, remove it for static assets
     let origin = `${url.protocol}//${url.host}`;
     const basePath = url.pathname || '';
