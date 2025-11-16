@@ -77,22 +77,56 @@ function EventDetail() {
 
   // Load Midtrans Snap JS when needed (only once)
   useEffect(() => {
-    if (!event || event.is_free) return;
+    if (!event || event.is_free) {
+      setSnapLoaded(true); // Free events don't need payment gateway
+      return;
+    }
+    
+    // Check if snap is already loaded
     if (window.snap) {
       setSnapLoaded(true);
       return;
     }
     
     const clientKey = process.env.REACT_APP_MIDTRANS_CLIENT_KEY;
-    if (!clientKey) return;
+    if (!clientKey) {
+      // No client key - allow direct registration without payment gateway
+      console.warn('Midtrans client key not configured. Payment gateway will be skipped.');
+      setSnapLoaded(true); // Set to true so button is enabled
+      return;
+    }
     
     const script = document.createElement('script');
     script.src = 'https://app.sandbox.midtrans.com/snap/snap.js';
     script.setAttribute('data-client-key', clientKey);
-    script.onload = () => setSnapLoaded(true);
-    script.onerror = () => setSnapLoaded(false);
+    
+    // Set timeout for script loading (10 seconds)
+    const timeout = setTimeout(() => {
+      if (!window.snap) {
+        console.warn('Midtrans Snap script failed to load within timeout.');
+        setSnapLoaded(true); // Allow button to be clicked anyway
+      }
+    }, 10000);
+    
+    script.onload = () => {
+      clearTimeout(timeout);
+      if (window.snap) {
+        setSnapLoaded(true);
+      } else {
+        setSnapLoaded(true); // Allow button even if snap object not available
+      }
+    };
+    
+    script.onerror = () => {
+      clearTimeout(timeout);
+      console.error('Failed to load Midtrans Snap script.');
+      setSnapLoaded(true); // Allow button to be clicked anyway
+    };
+    
     document.body.appendChild(script);
+    
     return () => {
+      clearTimeout(timeout);
       // keep script for reuse; do not remove
     };
   }, [event]);
@@ -201,18 +235,37 @@ function EventDetail() {
       return;
     }
     if (!event || event.is_free) return;
+    
     try {
       setIsPaying(true);
       setError('');
+      
+      // If Midtrans is not configured, redirect to registration page
+      const clientKey = process.env.REACT_APP_MIDTRANS_CLIENT_KEY;
+      if (!clientKey || !window.snap) {
+        // No payment gateway configured - redirect to registration
+        navigate(`/events/${id}/register`);
+        return;
+      }
+      
       const res = await eventService.createPayment(event.id);
       const token = res?.snap_token;
+      
       if (token && window.snap) {
         window.snap.pay(token, {
           onSuccess: function () {
             setSuccess('Pembayaran berhasil. Status registrasi akan diperbarui.');
+            // Refresh page after a delay
+            setTimeout(() => {
+              window.location.reload();
+            }, 2000);
           },
           onPending: function () {
             setSuccess('Pembayaran tertunda. Silakan selesaikan pembayaran Anda.');
+            // Refresh page after a delay
+            setTimeout(() => {
+              window.location.reload();
+            }, 2000);
           },
           onError: function () {
             setError('Terjadi kesalahan saat memproses pembayaran.');
@@ -222,10 +275,18 @@ function EventDetail() {
           }
         });
       } else {
-        setError('Gagal memuat Snap. Pastikan REACT_APP_MIDTRANS_CLIENT_KEY terpasang dan reload halaman.');
+        // No token or snap not available - redirect to registration
+        navigate(`/events/${id}/register`);
       }
     } catch (e) {
-      setError(e?.response?.data?.message || 'Gagal memulai pembayaran.');
+      console.error('Payment error:', e);
+      // On error, redirect to registration page
+      if (e?.response?.status === 404 || e?.response?.status === 400) {
+        // User not registered yet - redirect to registration
+        navigate(`/events/${id}/register`);
+      } else {
+        setError(e?.response?.data?.message || 'Gagal memulai pembayaran. Silakan daftar terlebih dahulu.');
+      }
     } finally {
       setIsPaying(false);
     }
@@ -401,15 +462,15 @@ function EventDetail() {
                 <>
                   <Button 
                     onClick={handlePay}
-                    disabled={isPaying || !snapLoaded || isEventExpired}
+                    disabled={isPaying || isEventExpired}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[16px] h-12 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={!snapLoaded ? 'Loading payment gateway...' : isEventExpired ? 'Event sudah kadaluarsa' : ''}
+                    title={isEventExpired ? 'Event sudah kadaluarsa' : ''}
                   >
-                    {isEventExpired ? 'Event Sudah Berakhir' : isPaying ? 'Memproses...' : !snapLoaded ? 'Loading...' : 'Beli Sekarang'}
+                    {isEventExpired ? 'Event Sudah Berakhir' : isPaying ? 'Memproses...' : !snapLoaded ? 'Memuat...' : 'Beli Sekarang'}
                   </Button>
                   {!snapLoaded && !isEventExpired && (
                     <p className="text-xs text-gray-500 mt-2 text-center">
-                      Memuat payment gateway... Jika tidak muncul, reload halaman.
+                      Memuat payment gateway...
                     </p>
                   )}
                 </>
