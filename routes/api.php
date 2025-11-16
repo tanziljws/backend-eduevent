@@ -59,7 +59,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/registrations', [UserController::class, 'registrations']);
         Route::get('/history', [UserController::class, 'history']);
         Route::get('/certificates', [UserController::class, 'certificates']);
+        Route::get('/wishlist', [UserController::class, 'wishlist']);
     });
+
+    // Wishlist routes
+    Route::post('/events/{id}/wishlist', [UserController::class, 'toggleWishlist']);
+    Route::get('/wishlist', [UserController::class, 'wishlist']);
 
     // Registrations
     Route::delete('/registrations/{id}', [UserController::class, 'cancelRegistration']);

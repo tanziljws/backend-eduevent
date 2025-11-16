@@ -139,7 +139,8 @@ class BannerController extends Controller
             Storage::disk('public')->delete($banner->image_path);
         }
 
-        $banner->delete();
+        // Hard delete since we don't use SoftDeletes
+        $banner->delete(); // This will do hard delete since model doesn't use SoftDeletes
 
         return response()->json([
             'success' => true,

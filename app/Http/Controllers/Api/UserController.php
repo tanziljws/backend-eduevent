@@ -392,6 +392,78 @@ class UserController extends Controller
     }
 
     /**
+     * Get user wishlist
+     */
+    public function wishlist(Request $request)
+    {
+        $user = $request->user();
+        $wishlists = \App\Models\Wishlist::where('user_id', $user->id)
+            ->with(['event'])
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $wishlists->map(function ($wishlist) {
+                if (!$wishlist->event) {
+                    return null; // Skip if event is deleted
+                }
+                return [
+                    'id' => $wishlist->id,
+                    'event_id' => $wishlist->event_id,
+                    'event' => [
+                        'id' => $wishlist->event->id,
+                        'title' => $wishlist->event->title,
+                        'description' => $wishlist->event->description,
+                        'event_date' => $wishlist->event->event_date?->format('Y-m-d'),
+                        'start_time' => $wishlist->event->start_time?->format('H:i:s'),
+                        'location' => $wishlist->event->location,
+                        'category' => $wishlist->event->category,
+                        'is_published' => $wishlist->event->is_published,
+                        'is_free' => $wishlist->event->is_free,
+                        'price' => (float) $wishlist->event->price,
+                        'flyer_url' => $wishlist->event->flyer_url,
+                        'registered_count' => $wishlist->event->registered_count,
+                    ],
+                    'created_at' => $wishlist->created_at?->toISOString(),
+                ];
+            })->filter(), // Remove null entries
+        ]);
+    }
+
+    /**
+     * Toggle wishlist (add/remove event from wishlist)
+     */
+    public function toggleWishlist(Request $request, $eventId)
+    {
+        $user = $request->user();
+        $event = Event::findOrFail($eventId);
+
+        $wishlist = \App\Models\Wishlist::where('user_id', $user->id)
+            ->where('event_id', $eventId)
+            ->first();
+
+        if ($wishlist) {
+            $wishlist->delete();
+            return response()->json([
+                'success' => true,
+                'message' => 'Event dihapus dari wishlist.',
+                'is_wishlisted' => false,
+            ]);
+        } else {
+            \App\Models\Wishlist::create([
+                'user_id' => $user->id,
+                'event_id' => $eventId,
+            ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Event ditambahkan ke wishlist.',
+                'is_wishlisted' => true,
+            ]);
+        }
+    }
+
+    /**
      * Change password
      */
     public function changePassword(Request $request)
