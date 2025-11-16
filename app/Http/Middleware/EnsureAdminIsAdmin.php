@@ -17,16 +17,9 @@ class EnsureAdminIsAdmin
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // Check if admins table exists first
-        if (!Schema::hasTable('admins')) {
-            Log::error('Admin middleware: admins table does not exist');
-            return response()->json([
-                'success' => false,
-                'message' => 'Admin system not configured. Please run migrations to create admins table.',
-                'error' => config('app.debug') ? 'Table "admins" does not exist' : null,
-            ], 500);
-        }
-
+        // Note: We support both admins table and users table with role='admin' as fallback
+        // So we don't need to check if admins table exists here
+        
         $admin = null;
 
         // Check if using Sanctum token (API request with Bearer token)
