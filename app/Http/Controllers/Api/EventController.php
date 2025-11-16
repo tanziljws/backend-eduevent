@@ -548,11 +548,14 @@ class EventController extends Controller
             $payment->save();
         }
 
+        // Get order_id from appropriate column
+        $orderId = $payment->order_id ?? $payment->midtrans_order_id ?? null;
+        
         return response()->json([
             'success' => true,
             'payment_id' => $payment->id,
-            'snap_token' => $payment->snap_token,
-            'order_id' => $payment->order_id,
+            'snap_token' => $payment->snap_token ?? null,
+            'order_id' => $orderId,
             'amount' => (float) $payment->amount,
         ]);
     }
