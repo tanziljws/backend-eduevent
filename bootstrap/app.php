@@ -12,19 +12,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Enable CORS for API routes with custom configuration
+        // Enable CORS for API routes (configuration in config/cors.php)
         $middleware->api(prepend: [
             \Illuminate\Http\Middleware\HandleCors::class,
         ]);
-        
-        // Configure CORS to allow Railway frontend origins
-        \Illuminate\Support\Facades\Config::set('cors.allowed_origins', array_merge(
-            config('cors.allowed_origins', []),
-            [
-                'https://frontend-eduevent-production.up.railway.app',
-                env('FRONTEND_URL', 'https://frontend-eduevent-production.up.railway.app'),
-            ]
-        ));
         
         // Redirect to appropriate login based on guard (for web routes only)
         $middleware->redirectGuestsTo(function ($request) {
