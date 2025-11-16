@@ -57,8 +57,7 @@ class BannerController extends Controller
             'link_url' => 'nullable|url|max:255',
             'order' => 'nullable|integer|min:0',
             'is_active' => 'nullable|boolean',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
+            // Removed start_date and end_date validation - columns don't exist in database
         ]);
 
         $data = $request->except(['image']);
@@ -93,8 +92,7 @@ class BannerController extends Controller
             'link_url' => 'nullable|url|max:255',
             'order' => 'nullable|integer|min:0',
             'is_active' => 'nullable|boolean',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
+            // Removed start_date and end_date validation - columns don't exist in database
         ]);
 
         $data = $request->except(['image']);
