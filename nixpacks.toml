@@ -1,0 +1,19 @@
+[phases.setup]
+nixPkgs = ["nodejs-18_x", "php82", "composer"]
+
+[phases.install]
+cmds = [
+  "composer install --optimize-autoloader --no-dev",
+  "cd resources/frontend && npm install && cd ../.."
+]
+
+[phases.build]
+cmds = [
+  "cd resources/frontend && npm run build && cd ../..",
+  "php artisan config:cache",
+  "php artisan route:cache"
+]
+
+[start]
+cmd = "php artisan serve --host=0.0.0.0 --port=$PORT"
+

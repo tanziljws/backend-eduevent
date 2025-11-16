@@ -186,20 +186,22 @@ CORS sudah dikonfigurasi di `config/cors.php` untuk allow origins:
    - `APP_URL` (Railway public domain)
    - `FRONTEND_URL` (opsional, untuk CORS)
 
-3. Railway akan otomatis:
-   - Install Composer dependencies
-   - Run migrations (jika ada)
-   - Build frontend (tambahkan build command jika perlu)
-
-4. **Build Command untuk Railway:**
+3. **Build Command untuk Railway (di Settings → Deploy):**
    ```bash
-   cd resources/frontend && npm install && npm run build
+   composer install --optimize-autoloader --no-dev && cd resources/frontend && npm install && npm run build && cd ../..
    ```
 
-5. **Start Command:**
+4. **Start Command:**
    ```bash
    php artisan serve --host=0.0.0.0 --port=$PORT
    ```
+
+5. **Alternatif: Gunakan Nixpacks (Recommended)**
+   - Railway akan otomatis detect `nixpacks.toml`
+   - File sudah dikonfigurasi untuk build frontend otomatis
+   - Pastikan Node.js 18+ dan PHP 8.2+ tersedia
+
+**Catatan:** Railway menggunakan file `nixpacks.toml` atau `railway.json` untuk konfigurasi build. Jika tidak menggunakan Nixpacks, set manual Build Command di Railway Settings.
 
 ### **Manual Deployment**
 
