@@ -155,7 +155,28 @@ function EventRegistration() {
       
       // Step 1: Create registration and payment first (backend will handle Midtrans token generation)
       console.log('Creating payment...');
-      const res = await eventService.createPayment(event.id);
+      let res;
+      try {
+        res = await eventService.createPayment(event.id);
+      } catch (paymentError) {
+        // Handle error response from backend (e.g., 400 status when Midtrans not configured)
+        const errorMessage = paymentError?.response?.data?.message 
+          || paymentError?.response?.data?.error 
+          || 'Payment gateway belum dikonfigurasi. Silakan hubungi admin.';
+        console.error('Payment creation error:', errorMessage);
+        setError(errorMessage);
+        setIsPaying(false);
+        return;
+      }
+      
+      // Check if backend returned an error (shouldn't happen if axios throws, but just in case)
+      if (!res || !res.success) {
+        console.error('Backend returned error:', res?.message);
+        setError(res?.message || 'Payment gateway belum dikonfigurasi. Silakan hubungi admin.');
+        setIsPaying(false);
+        return;
+      }
+      
       const token = res?.snap_token;
       
       console.log('Payment created:', { 
@@ -290,7 +311,11 @@ function EventRegistration() {
     } catch (err) {
       console.error('Payment error:', err);
       // On error, show error message - JANGAN redirect
-      const errorMessage = err?.response?.data?.message || 'Gagal memulai pembayaran. Silakan coba lagi.';
+      // Handle both error response (400) and network errors
+      const errorMessage = err?.response?.data?.message 
+        || err?.response?.data?.error 
+        || err?.message 
+        || 'Gagal memulai pembayaran. Silakan coba lagi.';
       setError(errorMessage);
       setIsPaying(false);
       // Jangan navigate/redirect di catch block - user harus tetap di halaman payment

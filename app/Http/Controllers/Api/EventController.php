@@ -800,14 +800,29 @@ class EventController extends Controller
             }
         }
         
-        // If no valid snap_token (Midtrans not configured or failed), return null
-        // Frontend will handle this gracefully
-        if (!$snapToken && $hasSnapTokenColumn) {
-            // Don't save mock token - return null instead
-            Log::warning('No valid Midtrans snap_token - Midtrans may not be configured', [
+        // If no valid snap_token (Midtrans not configured or failed), return error message
+        if (!$snapToken) {
+            $errorMessage = 'Payment gateway belum dikonfigurasi.';
+            
+            if (empty($midtransServerKey)) {
+                $errorMessage = 'MIDTRANS_SERVER_KEY belum dikonfigurasi di server. Silakan hubungi admin untuk mengkonfigurasi payment gateway.';
+                Log::warning('Midtrans server key not configured', [
+                    'payment_id' => $payment->id,
+                ]);
+            } else {
+                $errorMessage = 'Gagal mendapatkan token pembayaran dari Midtrans. Silakan hubungi admin atau coba lagi nanti.';
+                Log::warning('Failed to generate Midtrans snap_token', [
+                    'payment_id' => $payment->id,
+                    'has_server_key' => !empty($midtransServerKey),
+                ]);
+            }
+            
+            return response()->json([
+                'success' => false,
+                'message' => $errorMessage,
                 'payment_id' => $payment->id,
-                'has_server_key' => !empty($midtransServerKey),
-            ]);
+                'snap_token' => null,
+            ], 400);
         }
 
         // Get order_id from appropriate column
@@ -816,7 +831,7 @@ class EventController extends Controller
         return response()->json([
             'success' => true,
             'payment_id' => $payment->id,
-            'snap_token' => $snapToken, // Return actual token or null
+            'snap_token' => $snapToken,
             'order_id' => $orderId,
             'amount' => (float) $payment->amount,
         ]);
