@@ -406,10 +406,31 @@ class UserController extends Controller
         // Check if certificate already exists
         $certificate = Certificate::where('registration_id', $id)->first();
         if ($certificate) {
+            // If certificate already exists and is issued, return it
+            if ($certificate->status === 'issued' && $certificate->certificate_path) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Certificate sudah tersedia.',
+                    'certificate' => [
+                        'id' => $certificate->id,
+                        'available' => true,
+                        'status' => $certificate->status,
+                        'certificate_number' => $certificate->certificate_number,
+                        'certificate_url' => $certificate->certificate_url,
+                    ],
+                ]);
+            }
+            // If certificate exists but is pending, return it (still processing)
             return response()->json([
-                'success' => false,
-                'message' => 'Certificate already exists.',
-            ], 400);
+                'success' => true,
+                'message' => 'Sertifikat sedang diproses.',
+                'certificate' => [
+                    'id' => $certificate->id,
+                    'available' => false,
+                    'status' => $certificate->status,
+                    'certificate_number' => $certificate->certificate_number,
+                ],
+            ]);
         }
 
         // TODO: Implement certificate generation logic
@@ -424,8 +445,13 @@ class UserController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Certificate generation started.',
-            'certificate' => $certificate,
+            'message' => 'Sertifikat sedang diproses.',
+            'certificate' => [
+                'id' => $certificate->id,
+                'available' => false,
+                'status' => $certificate->status,
+                'certificate_number' => $certificate->certificate_number,
+            ],
         ]);
     }
 

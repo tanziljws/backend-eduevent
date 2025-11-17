@@ -60,12 +60,17 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
       const response = await eventService.generateCertificate(registration_id, {});
       
       if (response.success) {
-        alert('Sertifikat sedang diproses. Silakan refresh halaman dalam beberapa saat.');
-        // Refresh data after a delay
+        // If certificate is available, show success message
+        if (response.certificate?.available) {
+          alert('Sertifikat sudah tersedia. Halaman akan dimuat ulang.');
+        } else {
+          alert('Sertifikat sedang diproses. Halaman akan dimuat ulang.');
+        }
+        // Refresh data after a short delay to update the UI
         if (onRefresh) {
           setTimeout(() => {
             onRefresh();
-          }, 2000);
+          }, 1000);
         }
       } else {
         alert(response.message || 'Gagal membuat sertifikat. Silakan coba lagi.');
