@@ -383,11 +383,25 @@ class UserController extends Controller
     public function generateCertificate(Request $request, $id)
     {
         $user = $request->user();
+        // Check registration status - Railway DB uses 'registered'/'cancelled', new schema uses 'pending'/'confirmed'/'cancelled'/'completed'
         $registration = EventRegistration::where('id', $id)
             ->where('user_id', $user->id)
-            ->where('status', 'confirmed')
             ->with(['event'])
-            ->firstOrFail();
+            ->first();
+        
+        if (!$registration) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Registrasi tidak ditemukan atau Anda tidak memiliki akses.',
+            ], 404);
+        }
+        
+        if (!in_array($registration->status, ['confirmed', 'registered', 'completed'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Registrasi belum dikonfirmasi atau sudah dibatalkan.',
+            ], 400);
+        }
 
         // Check if certificate already exists
         $certificate = Certificate::where('registration_id', $id)->first();
