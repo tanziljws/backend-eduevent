@@ -688,26 +688,38 @@ class UserController extends Controller
                 'file_size' => filesize($filePath),
             ]);
             
-            // Use response()->download() for better compatibility with blob downloads
+            // Use response()->file() as requested (rollback)
+            // But add fallback to ensure it works
             try {
-                return response()->download($filePath, $filename, [
+                return response()->file($filePath, [
                     'Content-Type' => 'application/pdf',
+                    'Content-Disposition' => 'attachment; filename="' . $filename . '"',
                 ]);
-            } catch (\Exception $downloadError) {
-                Log::error('Error in response()->download()', [
+            } catch (\Exception $fileError) {
+                Log::error('Error in response()->file()', [
                     'certificate_id' => $certificate->id,
                     'file_path' => $filePath,
-                    'error' => $downloadError->getMessage(),
-                    'trace' => $downloadError->getTraceAsString(),
+                    'error' => $fileError->getMessage(),
+                    'trace' => $fileError->getTraceAsString(),
                 ]);
                 
-                // Fallback: try to read file and return as response
+                // Fallback: read file and return as binary response
                 try {
+                    if (!is_readable($filePath)) {
+                        throw new \Exception('File is not readable: ' . $filePath);
+                    }
+                    
                     $fileContent = file_get_contents($filePath);
+                    if ($fileContent === false) {
+                        throw new \Exception('Failed to read file contents');
+                    }
+                    
                     return response($fileContent, 200, [
                         'Content-Type' => 'application/pdf',
                         'Content-Disposition' => 'attachment; filename="' . $filename . '"',
                         'Content-Length' => strlen($fileContent),
+                        'Cache-Control' => 'no-cache, must-revalidate',
+                        'Pragma' => 'no-cache',
                     ]);
                 } catch (\Exception $readError) {
                     Log::error('Error reading certificate file', [
