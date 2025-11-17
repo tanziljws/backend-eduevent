@@ -16,15 +16,17 @@ import {
   Hash
 } from 'lucide-react';
 import { userService } from '../services/userService';
+import { eventService } from '../services/eventService';
+import { useState } from 'react';
 
-const EventHistoryCard = ({ eventData }) => {
-  const { event, attendance, certificate, registration_date, overall_status } = eventData;
+const EventHistoryCard = ({ eventData, onRefresh }) => {
+  const { event, attendance, certificate, registration_date, overall_status, registration_id } = eventData;
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Handle certificate download
   const handleDownloadCertificate = async (e) => {
     e.preventDefault();
-    
-    console.log('Certificate data:', certificate);
     
     if (!certificate || !certificate.id) {
       console.error('Certificate ID not found in data:', certificate);
@@ -33,12 +35,47 @@ const EventHistoryCard = ({ eventData }) => {
     }
     
     try {
-      console.log('Downloading certificate from EventHistoryCard, ID:', certificate.id);
+      setIsDownloading(true);
       await userService.downloadCertificate(certificate.id);
     } catch (error) {
       console.error('Error downloading certificate:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Gagal mengunduh sertifikat';
       alert(`Error: ${errorMessage}. Silakan coba lagi.`);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // Handle certificate generation
+  const handleGenerateCertificate = async (e) => {
+    e.preventDefault();
+    
+    if (!registration_id) {
+      alert('Registration ID tidak ditemukan. Silakan refresh halaman dan coba lagi.');
+      return;
+    }
+    
+    try {
+      setIsGenerating(true);
+      const response = await eventService.generateCertificate(registration_id, {});
+      
+      if (response.success) {
+        alert('Sertifikat sedang diproses. Silakan refresh halaman dalam beberapa saat.');
+        // Refresh data after a delay
+        if (onRefresh) {
+          setTimeout(() => {
+            onRefresh();
+          }, 2000);
+        }
+      } else {
+        alert(response.message || 'Gagal membuat sertifikat. Silakan coba lagi.');
+      }
+    } catch (error) {
+      console.error('Error generating certificate:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Gagal membuat sertifikat';
+      alert(`Error: ${errorMessage}. Silakan coba lagi.`);
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -98,7 +135,8 @@ const EventHistoryCard = ({ eventData }) => {
                 {statusConfig.icon}
                 <span className="ml-1">{statusConfig.text}</span>
               </Badge>
-              {certificate.available && (
+              {/* Show certificate badge if event is completed and user attended */}
+              {(overall_status === 'completed' || (overall_status === 'attended' && attendance?.is_present)) && (
                 <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 border">
                   <Award className="w-3 h-3 mr-1" />
                   Sertifikat
@@ -206,16 +244,31 @@ const EventHistoryCard = ({ eventData }) => {
             </Link>
           </Button>
 
-          {/* Show certificate button if certificate is available and has ID */}
-          {certificate?.available && certificate?.id && (
-            <Button
-              onClick={handleDownloadCertificate}
-              size="sm"
-              className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white"
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Sertifikat
-            </Button>
+          {/* Show certificate button for completed events where user attended */}
+          {(overall_status === 'completed' || (overall_status === 'attended' && attendance?.is_present)) && (
+            certificate?.available && certificate?.id ? (
+              // Certificate exists - show download button
+              <Button
+                onClick={handleDownloadCertificate}
+                size="sm"
+                className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white"
+                disabled={isDownloading}
+              >
+                <Download className="w-4 h-4 mr-1" />
+                {isDownloading ? 'Mengunduh...' : 'Sertifikat'}
+              </Button>
+            ) : (
+              // Certificate doesn't exist - show generate button
+              <Button
+                onClick={handleGenerateCertificate}
+                size="sm"
+                className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white"
+                disabled={isGenerating}
+              >
+                <Award className="w-4 h-4 mr-1" />
+                {isGenerating ? 'Memproses...' : 'Sertifikat'}
+              </Button>
+            )
           )}
 
           {overall_status === 'upcoming' && !attendance.is_present && (

@@ -15,24 +15,26 @@ export default function EmbeddedEventHistory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
-  useEffect(() => {
-    async function run() {
-      try {
-        setError('');
-        const res = await userService.getEventHistory();
-        if (res?.success) {
-          setEvents(res.data?.events || []);
-          // setStatistics(res.data?.statistics || {});
-        } else {
-          setError(res?.message || 'Gagal mengambil riwayat event');
-        }
-      } catch (e) {
-        setError('Terjadi kesalahan saat mengambil data riwayat event');
-      } finally {
-        setLoading(false);
+  const fetchEvents = async () => {
+    try {
+      setError('');
+      setLoading(true);
+      const res = await userService.getEventHistory();
+      if (res?.success) {
+        setEvents(res.data?.events || []);
+        // setStatistics(res.data?.statistics || {});
+      } else {
+        setError(res?.message || 'Gagal mengambil riwayat event');
       }
+    } catch (e) {
+      setError('Terjadi kesalahan saat mengambil data riwayat event');
+    } finally {
+      setLoading(false);
     }
-    run();
+  };
+
+  useEffect(() => {
+    fetchEvents();
   }, []);
 
   const filteredEvents = useMemo(() => {
