@@ -113,7 +113,11 @@ export default function EmbeddedEventHistory() {
       ) : filteredEvents.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredEvents.map((eventData) => (
-            <EventHistoryCard key={eventData.registration_id} eventData={eventData} />
+            <EventHistoryCard 
+              key={eventData.registration_id || eventData.event?.id} 
+              eventData={eventData}
+              onRefresh={fetchEvents}
+            />
           ))}
         </div>
       ) : (
