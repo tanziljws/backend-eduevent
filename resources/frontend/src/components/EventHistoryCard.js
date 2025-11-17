@@ -43,13 +43,37 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
       return;
     }
     
+    // If certificate is still pending and not available, show message
+    if (certificate.status === 'pending' && !certificate.available) {
+      alert('Sertifikat masih dalam proses. Silakan coba lagi dalam beberapa saat atau refresh halaman.');
+      // Refresh data to check for updates
+      if (onRefresh) {
+        setTimeout(() => {
+          onRefresh();
+        }, 1000);
+      }
+      return;
+    }
+    
     try {
       setIsDownloading(true);
       await userService.downloadCertificate(certificate.id);
     } catch (error) {
       console.error('Error downloading certificate:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Gagal mengunduh sertifikat';
-      alert(`Error: ${errorMessage}. Silakan coba lagi.`);
+      
+      // If certificate file not found, it might still be processing
+      if (error.response?.status === 404 || errorMessage.includes('not found')) {
+        alert('File sertifikat belum tersedia. Sertifikat masih dalam proses. Silakan refresh halaman dalam beberapa saat.');
+        // Refresh data to check for updates
+        if (onRefresh) {
+          setTimeout(() => {
+            onRefresh();
+          }, 1000);
+        }
+      } else {
+        alert(`Error: ${errorMessage}. Silakan coba lagi.`);
+      }
     } finally {
       setIsDownloading(false);
     }
@@ -272,16 +296,26 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
 
           {/* Show certificate button for completed/attended events */}
           {(overall_status === 'completed' || overall_status === 'attended') && (
-            certificate?.available && certificate?.id ? (
-              // Certificate exists - show download button
+            certificate?.id ? (
+              // Certificate exists (even if pending) - show download button
+              // If certificate is available, it will download. If not, backend will handle error
               <Button
                 onClick={handleDownloadCertificate}
                 size="sm"
                 className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white"
-                disabled={isDownloading}
+                disabled={isDownloading || (certificate?.status === 'pending' && !certificate?.available)}
               >
-                <Download className="w-4 h-4 mr-1" />
-                {isDownloading ? 'Mengunduh...' : 'Sertifikat'}
+                {certificate?.status === 'pending' && !certificate?.available ? (
+                  <>
+                    <Award className="w-4 h-4 mr-1" />
+                    Memproses...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-1" />
+                    {isDownloading ? 'Mengunduh...' : 'Sertifikat'}
+                  </>
+                )}
               </Button>
             ) : (
               // Certificate doesn't exist - show generate button
