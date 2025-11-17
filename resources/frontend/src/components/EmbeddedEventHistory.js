@@ -16,21 +16,21 @@ export default function EmbeddedEventHistory() {
   const [filterStatus, setFilterStatus] = useState('all');
 
   const fetchEvents = async () => {
-    try {
-      setError('');
+      try {
+        setError('');
       setLoading(true);
-      const res = await userService.getEventHistory();
-      if (res?.success) {
-        setEvents(res.data?.events || []);
-        // setStatistics(res.data?.statistics || {});
-      } else {
-        setError(res?.message || 'Gagal mengambil riwayat event');
+        const res = await userService.getEventHistory();
+        if (res?.success) {
+          setEvents(res.data?.events || []);
+          // setStatistics(res.data?.statistics || {});
+        } else {
+          setError(res?.message || 'Gagal mengambil riwayat event');
+        }
+      } catch (e) {
+        setError('Terjadi kesalahan saat mengambil data riwayat event');
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      setError('Terjadi kesalahan saat mengambil data riwayat event');
-    } finally {
-      setLoading(false);
-    }
   };
 
   useEffect(() => {

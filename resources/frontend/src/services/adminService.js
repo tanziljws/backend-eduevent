@@ -113,10 +113,10 @@ export const adminService = {
         }
       } else if (error?.response?.data?.message) {
         errorMessage = error.response.data.message;
-      }
+        }
       
       console.error('Export error:', { status, message: errorMessage, error });
-      
+
       // Check if it's authentication error
       if (status === 401 || status === 403) {
         throw new Error('Sesi Anda telah berakhir. Silakan login ulang sebagai admin.');
@@ -229,7 +229,7 @@ export const adminService = {
 
   exportEventParticipants: async (eventId, format = 'csv') => {
     try {
-      const api = createAxiosInstance();
+    const api = createAxiosInstance();
       
       // Check if token exists
       const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
@@ -237,9 +237,9 @@ export const adminService = {
         throw new Error('Anda harus login sebagai admin untuk mengekspor data.');
       }
       
-      const response = await api.get(`/admin/events/${eventId}/export?format=${format}`, {
-        responseType: 'blob'
-      });
+    const response = await api.get(`/admin/events/${eventId}/export?format=${format}`, {
+      responseType: 'blob'
+    });
       
       // Check if response is actually an error (blob might contain JSON error)
       if (response.data instanceof Blob && response.data.type === 'application/json') {
@@ -262,18 +262,18 @@ export const adminService = {
         const extracted = decodeURIComponent(match?.[1] || match?.[2] || '').trim();
         if (extracted) filename = extracted;
       }
-      
-      // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
       link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      
-      return response;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    return response;
     } catch (error) {
       const status = error?.response?.status;
       let errorMessage = error.message || 'Gagal mengekspor data peserta.';

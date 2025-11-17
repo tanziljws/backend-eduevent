@@ -372,17 +372,34 @@ class UserController extends Controller
             ], 404);
         }
         
-        if (!Storage::disk('public')->exists($certificate->certificate_path)) {
+        try {
+            // Check if file exists
+            if (!Storage::disk('public')->exists($certificate->certificate_path)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Certificate file not found. Certificate may still be processing. Please try again later.',
+                ], 404);
+            }
+
+            // Download the file
+            return Storage::disk('public')->download(
+                $certificate->certificate_path,
+                'certificate-' . $certificate->certificate_number . '.pdf'
+            );
+        } catch (\Exception $e) {
+            // Log the error for debugging
+            Log::error('Certificate download error', [
+                'certificate_id' => $certificate->id,
+                'certificate_path' => $certificate->certificate_path,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Certificate file not found. Certificate may still be processing. Please try again later.',
-            ], 404);
+                'message' => 'Error downloading certificate: ' . $e->getMessage() . '. Certificate may still be processing.',
+            ], 500);
         }
-
-        return Storage::disk('public')->download(
-            $certificate->certificate_path,
-            'certificate-' . $certificate->certificate_number . '.pdf'
-        );
     }
 
     /**

@@ -60,10 +60,25 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
       await userService.downloadCertificate(certificate.id);
     } catch (error) {
       console.error('Error downloading certificate:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Gagal mengunduh sertifikat';
       
-      // If certificate file not found, it might still be processing
-      if (error.response?.status === 404 || errorMessage.includes('not found')) {
+      // Try to extract error message from blob response
+      let errorMessage = 'Gagal mengunduh sertifikat';
+      if (error.response?.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const json = JSON.parse(text);
+          errorMessage = json.message || errorMessage;
+        } catch (e) {
+          // If parsing fails, use default message
+        }
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      // If certificate file not found or 500 error, it might still be processing
+      if (error.response?.status === 404 || error.response?.status === 500 || errorMessage.includes('not found') || errorMessage.includes('processing')) {
         alert('File sertifikat belum tersedia. Sertifikat masih dalam proses. Silakan refresh halaman dalam beberapa saat.');
         // Refresh data to check for updates
         if (onRefresh) {
