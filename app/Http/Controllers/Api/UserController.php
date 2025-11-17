@@ -333,39 +333,66 @@ class UserController extends Controller
      */
     public function downloadCertificate(Request $request, $id)
     {
+        try {
+            Log::info('Certificate download request', [
+                'certificate_id' => $id,
+                'has_auth_header' => $request->hasHeader('Authorization'),
+                'bearer_token' => $request->bearerToken() ? 'present' : 'missing',
+            ]);
+            
         $user = $request->user();
-        
-        // If user is not authenticated via header, try to authenticate via query parameter token
-        if (!$user && $request->has('token')) {
-            $token = $request->query('token');
-            if ($token) {
-                // Find the personal access token
-                $personalAccessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
-                if ($personalAccessToken) {
-                    $user = $personalAccessToken->tokenable;
+            
+            // If user is not authenticated via header, try to authenticate via query parameter token
+            if (!$user && $request->has('token')) {
+                $token = $request->query('token');
+                if ($token) {
+                    // Find the personal access token
+                    $personalAccessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+                    if ($personalAccessToken) {
+                        $user = $personalAccessToken->tokenable;
+                    }
                 }
             }
-        }
-        
-        // Check if user is authenticated
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized. Please login to download certificate.',
-            ], 401);
-        }
-        
+            
+            // Check if user is authenticated
+            if (!$user) {
+                Log::warning('Certificate download failed: User not authenticated', [
+                    'certificate_id' => $id,
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. Please login to download certificate.',
+                ], 401);
+            }
+            
+            Log::info('User authenticated for certificate download', [
+                'certificate_id' => $id,
+                'user_id' => $user->id,
+            ]);
+            
         $certificate = Certificate::where('id', $id)
             ->where('user_id', $user->id)
-            ->with(['registration', 'event', 'user'])
-            ->first();
+                ->with(['registration', 'event', 'user'])
+                ->first();
 
-        if (!$certificate) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Certificate not found or you do not have access to this certificate.',
-            ], 404);
-        }
+            if (!$certificate) {
+                Log::warning('Certificate not found', [
+                    'certificate_id' => $id,
+                    'user_id' => $user->id,
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Certificate not found or you do not have access to this certificate.',
+                ], 404);
+            }
+            
+            Log::info('Certificate found', [
+                'certificate_id' => $certificate->id,
+                'certificate_path' => $certificate->certificate_path,
+                'status' => $certificate->status,
+            ]);
 
         // Helper function to generate PDF for certificate
         $generatePdfForCertificate = function($cert) use ($user) {
@@ -476,25 +503,53 @@ class UserController extends Controller
             }
 
             // Download the file
+            Log::info('Preparing to download certificate file', [
+                'certificate_id' => $certificate->id,
+                'certificate_path' => $certificate->certificate_path,
+            ]);
+            
             $filePath = Storage::disk('public')->path($certificate->certificate_path);
             
+            Log::info('File path resolved', [
+                'certificate_id' => $certificate->id,
+                'file_path' => $filePath,
+                'file_exists' => file_exists($filePath),
+            ]);
+            
             if (!file_exists($filePath)) {
+                Log::error('Certificate file not found on disk', [
+                    'certificate_id' => $certificate->id,
+                    'certificate_path' => $certificate->certificate_path,
+                    'resolved_path' => $filePath,
+                ]);
+                
                 return response()->json([
                     'success' => false,
                     'message' => 'Certificate file not found at path: ' . $certificate->certificate_path,
                 ], 404);
             }
             
-            return response()->file($filePath, [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'attachment; filename="certificate-' . ($certificate->certificate_number ?: 'certificate-' . $certificate->id) . '.pdf"',
+            $filename = 'certificate-' . ($certificate->certificate_number ?: 'certificate-' . $certificate->id) . '.pdf';
+            
+            Log::info('Returning certificate file for download', [
+                'certificate_id' => $certificate->id,
+                'filename' => $filename,
+                'file_size' => filesize($filePath),
             ]);
+            
+            // Use response()->download() instead of response()->file() for better reliability
+            return response()->download($filePath, $filename, [
+                'Content-Type' => 'application/pdf',
+            ]);
+            
         } catch (\Exception $e) {
             // Log the error for debugging
             Log::error('Certificate download error', [
-                'certificate_id' => $certificate->id ?? null,
-                'certificate_path' => $certificate->certificate_path ?? null,
+                'certificate_id' => $id ?? null,
+                'user_id' => $user->id ?? null,
                 'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
             ]);
             
