@@ -370,14 +370,24 @@ class UserController extends Controller
         // Helper function to generate PDF for certificate
         $generatePdfForCertificate = function($cert) use ($user) {
             try {
+                Log::info('Starting PDF generation for certificate', ['certificate_id' => $cert->id]);
+                
                 // Reload certificate with relationships if not loaded
                 if (!$cert->relationLoaded('registration') || !$cert->relationLoaded('event') || !$cert->relationLoaded('user')) {
+                    Log::info('Loading certificate relationships', ['certificate_id' => $cert->id]);
                     $cert->load(['registration', 'event', 'user']);
                 }
                 
                 $registration = $cert->registration;
                 $event = $cert->event;
                 $userData = $cert->user;
+                
+                Log::info('Certificate relationships loaded', [
+                    'certificate_id' => $cert->id,
+                    'has_registration' => $registration ? 'yes' : 'no',
+                    'has_event' => $event ? 'yes' : 'no',
+                    'has_user' => $userData ? 'yes' : 'no',
+                ]);
                 
                 if (!$registration || !$event || !$userData) {
                     throw new \Exception('Certificate relationships not found. Registration: ' . ($registration ? 'yes' : 'no') . ', Event: ' . ($event ? 'yes' : 'no') . ', User: ' . ($userData ? 'yes' : 'no'));
@@ -386,19 +396,41 @@ class UserController extends Controller
                 $certificateNumber = $cert->certificate_number ?: 'CERT-' . date('Y') . '-' . strtoupper(substr(md5(time() . $cert->id), 0, 8));
                 $certificatePath = 'certificates/' . $certificateNumber . '.pdf';
                 
+                Log::info('Generating PDF', [
+                    'certificate_id' => $cert->id,
+                    'certificate_number' => $certificateNumber,
+                    'certificate_path' => $certificatePath,
+                ]);
+                
                 $pdf = $this->generateCertificatePdf($userData, $event, $certificateNumber, $registration);
+                
+                Log::info('PDF generated successfully', [
+                    'certificate_id' => $cert->id,
+                    'pdf_size' => strlen($pdf),
+                ]);
                 
                 // Ensure certificates directory exists
                 $certificatesDir = storage_path('app/public/certificates');
                 if (!file_exists($certificatesDir)) {
+                    Log::info('Creating certificates directory', ['path' => $certificatesDir]);
                     if (!mkdir($certificatesDir, 0755, true)) {
-                        throw new \Exception('Failed to create certificates directory');
+                        throw new \Exception('Failed to create certificates directory: ' . $certificatesDir);
                     }
                 }
                 
+                Log::info('Saving PDF to storage', [
+                    'certificate_id' => $cert->id,
+                    'path' => $certificatePath,
+                ]);
+                
                 if (!Storage::disk('public')->put($certificatePath, $pdf)) {
-                    throw new \Exception('Failed to save PDF file to storage');
+                    throw new \Exception('Failed to save PDF file to storage: ' . $certificatePath);
                 }
+                
+                Log::info('PDF saved successfully', [
+                    'certificate_id' => $cert->id,
+                    'path' => $certificatePath,
+                ]);
                 
                 // Update certificate with path
                 $cert->certificate_path = $certificatePath;
@@ -780,27 +812,35 @@ class UserController extends Controller
         
         // Check if Dompdf is available
         if (!class_exists('Dompdf\Dompdf')) {
-            throw new \Exception('PDF generation library (Dompdf) is not installed. Please install it via composer.');
+            Log::error('Dompdf class not found', [
+                'available_classes' => class_exists('Dompdf\Dompdf') ? 'yes' : 'no',
+            ]);
+            throw new \Exception('PDF generation library (Dompdf) is not installed. Please run: composer require dompdf/dompdf');
         }
-        
-        // Configure Dompdf
-        $options = new Options();
-        $options->set('isHtml5ParserEnabled', true);
-        $options->set('isRemoteEnabled', true);
-        $options->set('defaultFont', 'Times New Roman');
-        $options->set('chroot', base_path());
-        
-        $dompdf = new Dompdf($options);
-        $dompdf->loadHtml($html);
-        $dompdf->setPaper('A4', 'landscape');
         
         try {
+            // Configure Dompdf
+            $options = new Options();
+            $options->set('isHtml5ParserEnabled', true);
+            $options->set('isRemoteEnabled', false); // Disable remote for security
+            $options->set('defaultFont', 'Times New Roman');
+            $options->set('chroot', base_path());
+            $options->set('tempDir', storage_path('app/temp'));
+            
+            $dompdf = new Dompdf($options);
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('A4', 'landscape');
+            
             $dompdf->render();
+            
+            return $dompdf->output();
         } catch (\Exception $e) {
+            Log::error('Dompdf render error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             throw new \Exception('Failed to render PDF: ' . $e->getMessage());
         }
-        
-        return $dompdf->output();
     }
 
     /**
