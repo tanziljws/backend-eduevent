@@ -343,10 +343,22 @@ class AdminController extends Controller
                 
                 $no = 1;
                 foreach ($events as $event) {
+                    // Safely format event_date
+                    $eventDate = '-';
+                    if ($event->event_date) {
+                        try {
+                            $eventDate = $event->event_date instanceof \Carbon\Carbon 
+                                ? $event->event_date->format('Y-m-d')
+                                : Carbon::parse($event->event_date)->format('Y-m-d');
+                        } catch (\Exception $e) {
+                            $eventDate = is_string($event->event_date) ? $event->event_date : '-';
+                        }
+                    }
+                    
                     $csvData[] = [
                         $no++,
                         $event->title,
-                        $event->event_date ? $event->event_date->format('Y-m-d') : '-',
+                        $eventDate,
                         $event->location ?? '-',
                         $event->category ?? '-',
                         $event->is_free ? 'Gratis' : 'Rp ' . number_format($event->price, 0, ',', '.'),
@@ -388,14 +400,46 @@ class AdminController extends Controller
                     $event = $reg->event;
                     $attendance = $reg->attendance;
                     
+                    // Safely format event_date
+                    $eventDate = '-';
+                    if ($event && $event->event_date) {
+                        try {
+                            $eventDate = $event->event_date instanceof \Carbon\Carbon 
+                                ? $event->event_date->format('Y-m-d')
+                                : Carbon::parse($event->event_date)->format('Y-m-d');
+                        } catch (\Exception $e) {
+                            $eventDate = is_string($event->event_date) ? $event->event_date : '-';
+                        }
+                    }
+                    
+                    // Safely format registered_at or created_at
+                    $registrationDate = '-';
+                    if ($reg->registered_at) {
+                        try {
+                            $registrationDate = $reg->registered_at instanceof \Carbon\Carbon 
+                                ? $reg->registered_at->format('Y-m-d H:i:s')
+                                : Carbon::parse($reg->registered_at)->format('Y-m-d H:i:s');
+                        } catch (\Exception $e) {
+                            $registrationDate = is_string($reg->registered_at) ? $reg->registered_at : '-';
+                        }
+                    } elseif ($reg->created_at) {
+                        try {
+                            $registrationDate = $reg->created_at instanceof \Carbon\Carbon 
+                                ? $reg->created_at->format('Y-m-d H:i:s')
+                                : Carbon::parse($reg->created_at)->format('Y-m-d H:i:s');
+                        } catch (\Exception $e) {
+                            $registrationDate = is_string($reg->created_at) ? $reg->created_at : '-';
+                        }
+                    }
+                    
                     $csvData[] = [
                         $no++,
                         $user->name ?? $reg->name ?? 'N/A',
                         $user->email ?? $reg->email ?? 'N/A',
                         $event->title ?? 'N/A',
-                        $event->event_date ? $event->event_date->format('Y-m-d') : '-',
+                        $eventDate,
                         $reg->status ?? 'registered',
-                        $reg->registered_at ? $reg->registered_at->format('Y-m-d H:i:s') : ($reg->created_at ? $reg->created_at->format('Y-m-d H:i:s') : '-'),
+                        $registrationDate,
                         $attendance ? 'Hadir' : 'Tidak hadir',
                     ];
                 }
@@ -425,13 +469,45 @@ class AdminController extends Controller
                     $user = $att->user;
                     $event = $att->event;
                     
+                    // Safely format event_date
+                    $eventDate = '-';
+                    if ($event && $event->event_date) {
+                        try {
+                            $eventDate = $event->event_date instanceof \Carbon\Carbon 
+                                ? $event->event_date->format('Y-m-d')
+                                : Carbon::parse($event->event_date)->format('Y-m-d');
+                        } catch (\Exception $e) {
+                            $eventDate = is_string($event->event_date) ? $event->event_date : '-';
+                        }
+                    }
+                    
+                    // Safely format checked_in_at or attendance_time
+                    $attendanceDate = '-';
+                    if ($att->checked_in_at) {
+                        try {
+                            $attendanceDate = $att->checked_in_at instanceof \Carbon\Carbon 
+                                ? $att->checked_in_at->format('Y-m-d H:i:s')
+                                : Carbon::parse($att->checked_in_at)->format('Y-m-d H:i:s');
+                        } catch (\Exception $e) {
+                            $attendanceDate = is_string($att->checked_in_at) ? $att->checked_in_at : '-';
+                        }
+                    } elseif ($att->attendance_time) {
+                        try {
+                            $attendanceDate = $att->attendance_time instanceof \Carbon\Carbon 
+                                ? $att->attendance_time->format('Y-m-d H:i:s')
+                                : Carbon::parse($att->attendance_time)->format('Y-m-d H:i:s');
+                        } catch (\Exception $e) {
+                            $attendanceDate = is_string($att->attendance_time) ? $att->attendance_time : '-';
+                        }
+                    }
+                    
                     $csvData[] = [
                         $no++,
                         $user->name ?? 'N/A',
                         $user->email ?? 'N/A',
                         $event->title ?? 'N/A',
-                        $event->event_date ? $event->event_date->format('Y-m-d') : '-',
-                        $att->checked_in_at ? $att->checked_in_at->format('Y-m-d H:i:s') : ($att->attendance_time ? $att->attendance_time->format('Y-m-d H:i:s') : '-'),
+                        $eventDate,
+                        $attendanceDate,
                         $att->status ?? 'present',
                     ];
                 }
@@ -574,17 +650,50 @@ class AdminController extends Controller
                     $user = $reg->user;
                     $attendance = $reg->attendance;
                     
+                    // Safely format registered_at or created_at
+                    $registrationDate = '-';
+                    if ($reg->registered_at) {
+                        try {
+                            $registrationDate = $reg->registered_at instanceof \Carbon\Carbon 
+                                ? $reg->registered_at->format('Y-m-d H:i:s')
+                                : Carbon::parse($reg->registered_at)->format('Y-m-d H:i:s');
+                        } catch (\Exception $e) {
+                            $registrationDate = is_string($reg->registered_at) ? $reg->registered_at : '-';
+                        }
+                    } elseif ($reg->created_at) {
+                        try {
+                            $registrationDate = $reg->created_at instanceof \Carbon\Carbon 
+                                ? $reg->created_at->format('Y-m-d H:i:s')
+                                : Carbon::parse($reg->created_at)->format('Y-m-d H:i:s');
+                        } catch (\Exception $e) {
+                            $registrationDate = is_string($reg->created_at) ? $reg->created_at : '-';
+                        }
+                    }
+                    
+                    // Safely format attendance date
+                    $attendanceDate = '-';
+                    if ($attendance) {
+                        $dateField = $attendance->checked_in_at ?? $attendance->attendance_time ?? null;
+                        if ($dateField) {
+                            try {
+                                $attendanceDate = $dateField instanceof \Carbon\Carbon 
+                                    ? $dateField->format('Y-m-d H:i:s')
+                                    : Carbon::parse($dateField)->format('Y-m-d H:i:s');
+                            } catch (\Exception $e) {
+                                $attendanceDate = is_string($dateField) ? $dateField : '-';
+                            }
+                        }
+                    }
+                    
                     $csvData[] = [
                         $no++,
                         $user->name ?? $reg->name ?? 'N/A',
                         $user->email ?? $reg->email ?? 'N/A',
                         $user->phone ?? $reg->phone ?? '-',
                         $reg->status ?? 'registered',
-                        $reg->registered_at ? $reg->registered_at->format('Y-m-d H:i:s') : ($reg->created_at ? $reg->created_at->format('Y-m-d H:i:s') : '-'),
+                        $registrationDate,
                         $attendance ? ($attendance->status ?? 'present') : 'Tidak hadir',
-                        $attendance && ($attendance->checked_in_at ?? $attendance->attendance_time ?? null) 
-                            ? ($attendance->checked_in_at ?? $attendance->attendance_time)->format('Y-m-d H:i:s')
-                            : '-',
+                        $attendanceDate,
                     ];
                 }
                 
