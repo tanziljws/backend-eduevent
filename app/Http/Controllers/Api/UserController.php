@@ -503,10 +503,26 @@ class UserController extends Controller
                 'user_id' => $user->id,
             ]);
             
+            // Query certificate - check user_id through registration relationship
+            // because production database might not have user_id column in certificates table
         $certificate = Certificate::where('id', $id)
-            ->where('user_id', $user->id)
                 ->with(['registration', 'event', 'user'])
                 ->first();
+            
+            // Verify ownership through registration
+            if ($certificate && $certificate->registration) {
+                if ($certificate->registration->user_id != $user->id) {
+                    $certificate = null; // User doesn't own this certificate
+                }
+            } else if ($certificate && $certificate->user_id) {
+                // Fallback: if user_id column exists, check directly
+                if ($certificate->user_id != $user->id) {
+                    $certificate = null;
+                }
+            } else if ($certificate && !$certificate->registration) {
+                // If no registration relationship, we can't verify ownership
+                $certificate = null;
+            }
 
             if (!$certificate) {
                 Log::warning('Certificate not found', [
@@ -520,10 +536,13 @@ class UserController extends Controller
             ], 404);
         }
 
+            // Get certificate path - handle both certificate_path and file_path columns
+            $certificatePath = $certificate->certificate_path ?? $certificate->file_path ?? null;
+            
             Log::info('Certificate found', [
                 'certificate_id' => $certificate->id,
-                'certificate_path' => $certificate->certificate_path,
-                'status' => $certificate->status,
+                'certificate_path' => $certificatePath,
+                'status' => $certificate->status ?? null,
             ]);
 
             // Helper function to generate PDF for certificate
@@ -610,9 +629,12 @@ class UserController extends Controller
             };
             
             // Check if certificate file exists, if not, try to generate it
-            if (!$certificate->certificate_path) {
+            if (!$certificatePath) {
                 try {
                     $generatePdfForCertificate($certificate);
+                    // Reload certificate to get updated path
+                    $certificate->refresh();
+                    $certificatePath = $certificate->certificate_path ?? $certificate->file_path ?? null;
                 } catch (\Exception $e) {
                     return response()->json([
                         'success' => false,
@@ -622,9 +644,12 @@ class UserController extends Controller
             }
             
             // Check if file exists, if not try to regenerate
-            if (!Storage::disk('public')->exists($certificate->certificate_path)) {
+            if ($certificatePath && !Storage::disk('public')->exists($certificatePath)) {
                 try {
                     $generatePdfForCertificate($certificate);
+                    // Reload certificate to get updated path
+                    $certificate->refresh();
+                    $certificatePath = $certificate->certificate_path ?? $certificate->file_path ?? null;
                 } catch (\Exception $e) {
                     return response()->json([
                         'success' => false,
@@ -636,10 +661,17 @@ class UserController extends Controller
             // Download the file
             Log::info('Preparing to download certificate file', [
                 'certificate_id' => $certificate->id,
-                'certificate_path' => $certificate->certificate_path,
+                'certificate_path' => $certificatePath,
             ]);
             
-            $filePath = Storage::disk('public')->path($certificate->certificate_path);
+            if (!$certificatePath) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Certificate file path not found. Please try generating the certificate again.',
+                ], 404);
+            }
+            
+            $filePath = Storage::disk('public')->path($certificatePath);
             
             Log::info('File path resolved', [
                 'certificate_id' => $certificate->id,
@@ -650,7 +682,7 @@ class UserController extends Controller
             if (!file_exists($filePath)) {
                 Log::error('Certificate file not found on disk', [
                     'certificate_id' => $certificate->id,
-                    'certificate_path' => $certificate->certificate_path,
+                    'certificate_path' => $certificatePath,
                     'resolved_path' => $filePath,
                 ]);
                 
@@ -662,7 +694,11 @@ class UserController extends Controller
                     $generatePdfForCertificate($certificate);
                     // Reload certificate to get updated path
                     $certificate->refresh();
-                    $filePath = Storage::disk('public')->path($certificate->certificate_path);
+                    $certificatePath = $certificate->certificate_path ?? $certificate->file_path ?? null;
+                    if (!$certificatePath) {
+                        throw new \Exception('Certificate path still not found after regeneration');
+                    }
+                    $filePath = Storage::disk('public')->path($certificatePath);
                     
                     if (!file_exists($filePath)) {
                         throw new \Exception('File still not found after regeneration');
