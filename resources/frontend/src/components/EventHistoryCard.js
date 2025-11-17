@@ -187,6 +187,18 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
 
   const statusConfig = getStatusConfig(overall_status);
 
+  // Debug: Log data to console for all events
+  React.useEffect(() => {
+    console.log('EventHistoryCard Debug:', {
+      eventTitle: event.title,
+      overall_status,
+      certificate,
+      hasCertificate: !!certificate?.id,
+      registration_id,
+      shouldShowButton: overall_status === 'completed' || overall_status === 'attended',
+    });
+  }, [overall_status, certificate, event.title, registration_id]);
+
   return (
     <Card className="bg-white border-gray-200 hover:border-gray-300 transition-colors shadow-sm">
       <CardHeader className="pb-2 pt-4">
