@@ -75,13 +75,13 @@ class UserController extends Controller
                 try {
                     if (!$reg || !$reg->event) {
                         continue; // Skip if registration or event is missing
-                    }
+                }
 
-                    // Handle date parsing safely
+                // Handle date parsing safely
                     try {
-                        $eventDate = $reg->event->event_date ? Carbon::parse($reg->event->event_date) : null;
-                        if (!$eventDate) {
-                            continue; // Skip if event_date is null
+                $eventDate = $reg->event->event_date ? Carbon::parse($reg->event->event_date) : null;
+                if (!$eventDate) {
+                    continue; // Skip if event_date is null
                         }
                     } catch (\Exception $e) {
                         Log::warning('Error parsing event_date', [
@@ -91,10 +91,10 @@ class UserController extends Controller
                             'error' => $e->getMessage(),
                         ]);
                         continue; // Skip this registration
-                    }
+                }
 
                 // Handle start_time and end_time (they're already Carbon instances from Event model)
-                try {
+                    try {
                 $startTime = $reg->event->start_time 
                     ? ($reg->event->start_time instanceof \Carbon\Carbon 
                         ? $reg->event->start_time->copy()->setDateFrom($eventDate) 
@@ -106,16 +106,16 @@ class UserController extends Controller
                         ? $reg->event->end_time->copy()->setDateFrom($eventDate)
                         : ($reg->event->event_date ? Carbon::parse($reg->event->event_date . ' ' . $reg->event->end_time) : $startTime->copy()->addHours(8)))
                     : $startTime->copy()->addHours(8);
-                } catch (\Exception $e) {
-                    Log::warning('Error parsing start_time/end_time', [
-                        'registration_id' => $reg->id,
-                        'event_id' => $reg->event->id ?? null,
-                        'error' => $e->getMessage(),
-                    ]);
-                    // Use default times
-                    $startTime = $eventDate->copy()->setTime(0, 0);
-                    $endTime = $startTime->copy()->addHours(8);
-                }
+                    } catch (\Exception $e) {
+                        Log::warning('Error parsing start_time/end_time', [
+                            'registration_id' => $reg->id,
+                            'event_id' => $reg->event->id ?? null,
+                            'error' => $e->getMessage(),
+                        ]);
+                        // Use default times
+                        $startTime = $eventDate->copy()->setTime(0, 0);
+                        $endTime = $startTime->copy()->addHours(8);
+                    }
 
                 // Determine overall status
                 $overallStatus = 'upcoming';
@@ -526,90 +526,89 @@ class UserController extends Controller
                 'status' => $certificate->status,
             ]);
 
-        // Helper function to generate PDF for certificate
-        $generatePdfForCertificate = function($cert) use ($user) {
-            try {
-                Log::info('Starting PDF generation for certificate', ['certificate_id' => $cert->id]);
-                
-                // Reload certificate with relationships if not loaded
-                if (!$cert->relationLoaded('registration') || !$cert->relationLoaded('event') || !$cert->relationLoaded('user')) {
-                    Log::info('Loading certificate relationships', ['certificate_id' => $cert->id]);
-                    $cert->load(['registration', 'event', 'user']);
-                }
-                
-                $registration = $cert->registration;
-                $event = $cert->event;
-                $userData = $cert->user;
-                
-                Log::info('Certificate relationships loaded', [
-                    'certificate_id' => $cert->id,
-                    'has_registration' => $registration ? 'yes' : 'no',
-                    'has_event' => $event ? 'yes' : 'no',
-                    'has_user' => $userData ? 'yes' : 'no',
-                ]);
-                
-                if (!$registration || !$event || !$userData) {
-                    throw new \Exception('Certificate relationships not found. Registration: ' . ($registration ? 'yes' : 'no') . ', Event: ' . ($event ? 'yes' : 'no') . ', User: ' . ($userData ? 'yes' : 'no'));
-                }
-                
-                $certificateNumber = $cert->certificate_number ?: 'CERT-' . date('Y') . '-' . strtoupper(substr(md5(time() . $cert->id), 0, 8));
-                $certificatePath = 'certificates/' . $certificateNumber . '.pdf';
-                
-                Log::info('Generating PDF', [
-                    'certificate_id' => $cert->id,
-                    'certificate_number' => $certificateNumber,
-                    'certificate_path' => $certificatePath,
-                ]);
-                
-                $pdf = $this->generateCertificatePdf($userData, $event, $certificateNumber, $registration);
-                
-                Log::info('PDF generated successfully', [
-                    'certificate_id' => $cert->id,
-                    'pdf_size' => strlen($pdf),
-                ]);
-                
-                // Ensure certificates directory exists
-                $certificatesDir = storage_path('app/public/certificates');
-                if (!file_exists($certificatesDir)) {
-                    Log::info('Creating certificates directory', ['path' => $certificatesDir]);
-                    if (!mkdir($certificatesDir, 0755, true)) {
-                        throw new \Exception('Failed to create certificates directory: ' . $certificatesDir);
+            // Helper function to generate PDF for certificate
+            $generatePdfForCertificate = function($cert) use ($user) {
+                try {
+                    Log::info('Starting PDF generation for certificate', ['certificate_id' => $cert->id]);
+                    
+                    // Reload certificate with relationships if not loaded
+                    if (!$cert->relationLoaded('registration') || !$cert->relationLoaded('event') || !$cert->relationLoaded('user')) {
+                        Log::info('Loading certificate relationships', ['certificate_id' => $cert->id]);
+                        $cert->load(['registration', 'event', 'user']);
                     }
+                    
+                    $registration = $cert->registration;
+                    $event = $cert->event;
+                    $userData = $cert->user;
+                    
+                    Log::info('Certificate relationships loaded', [
+                        'certificate_id' => $cert->id,
+                        'has_registration' => $registration ? 'yes' : 'no',
+                        'has_event' => $event ? 'yes' : 'no',
+                        'has_user' => $userData ? 'yes' : 'no',
+                    ]);
+                    
+                    if (!$registration || !$event || !$userData) {
+                        throw new \Exception('Certificate relationships not found. Registration: ' . ($registration ? 'yes' : 'no') . ', Event: ' . ($event ? 'yes' : 'no') . ', User: ' . ($userData ? 'yes' : 'no'));
+                    }
+                    
+                    $certificateNumber = $cert->certificate_number ?: 'CERT-' . date('Y') . '-' . strtoupper(substr(md5(time() . $cert->id), 0, 8));
+                    $certificatePath = 'certificates/' . $certificateNumber . '.pdf';
+                    
+                    Log::info('Generating PDF', [
+                        'certificate_id' => $cert->id,
+                        'certificate_number' => $certificateNumber,
+                        'certificate_path' => $certificatePath,
+                    ]);
+                    
+                    $pdf = $this->generateCertificatePdf($userData, $event, $certificateNumber, $registration);
+                    
+                    Log::info('PDF generated successfully', [
+                        'certificate_id' => $cert->id,
+                        'pdf_size' => strlen($pdf),
+                    ]);
+                    
+                    // Ensure certificates directory exists
+                    $certificatesDir = storage_path('app/public/certificates');
+                    if (!file_exists($certificatesDir)) {
+                        Log::info('Creating certificates directory', ['path' => $certificatesDir]);
+                        if (!mkdir($certificatesDir, 0755, true)) {
+                            throw new \Exception('Failed to create certificates directory: ' . $certificatesDir);
+                        }
+                    }
+                    
+                    Log::info('Saving PDF to storage', [
+                        'certificate_id' => $cert->id,
+                        'path' => $certificatePath,
+                    ]);
+                    
+                    if (!Storage::disk('public')->put($certificatePath, $pdf)) {
+                        throw new \Exception('Failed to save PDF file to storage: ' . $certificatePath);
+                    }
+                    
+                    Log::info('PDF saved successfully', [
+                        'certificate_id' => $cert->id,
+                        'path' => $certificatePath,
+                    ]);
+                    
+                    // Update certificate with path
+                    $cert->certificate_path = $certificatePath;
+                    if (!$cert->certificate_number) {
+                        $cert->certificate_number = $certificateNumber;
+                    }
+                    $cert->save();
+                    
+                    return $certificatePath;
+                } catch (\Exception $e) {
+                    Log::error('Generate PDF for certificate failed', [
+                        'certificate_id' => $cert->id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    throw $e;
                 }
-                
-                Log::info('Saving PDF to storage', [
-                    'certificate_id' => $cert->id,
-                    'path' => $certificatePath,
-                ]);
-                
-                if (!Storage::disk('public')->put($certificatePath, $pdf)) {
-                    throw new \Exception('Failed to save PDF file to storage: ' . $certificatePath);
-                }
-                
-                Log::info('PDF saved successfully', [
-                    'certificate_id' => $cert->id,
-                    'path' => $certificatePath,
-                ]);
-                
-                // Update certificate with path
-                $cert->certificate_path = $certificatePath;
-                if (!$cert->certificate_number) {
-                    $cert->certificate_number = $certificateNumber;
-                }
-                $cert->save();
-                
-                return $certificatePath;
-            } catch (\Exception $e) {
-                Log::error('Generate PDF for certificate failed', [
-                    'certificate_id' => $cert->id,
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString(),
-                ]);
-                throw $e;
-            }
-        };
-        
-        try {
+            };
+            
             // Check if certificate file exists, if not, try to generate it
             if (!$certificate->certificate_path) {
                 try {
