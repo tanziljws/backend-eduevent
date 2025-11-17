@@ -145,10 +145,10 @@ export default function Profile() {
               <ChangePassword />
             </>
           ) : section === 'transactions' ? (
-            // Daftar Event section (default)
+            // Transaksi Event section (default)
             <Card className="bg-white/90 border-gray-200 shadow-sm rounded-xl">
               <CardHeader>
-                <CardTitle className="text-gray-800">Daftar Event Saya</CardTitle>
+                <CardTitle className="text-gray-800">Transaksi Event</CardTitle>
                 <p className="text-sm text-gray-600 mt-1">Semua event yang telah Anda ikuti</p>
               </CardHeader>
               <CardContent>

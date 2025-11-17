@@ -129,7 +129,7 @@ function Navbar() {
 
                   {isProfileMenuOpen && (
                     <div className="absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50">
-                      {/* My Profile - only for regular users, not admin */}
+                      {/* My Riwayat - only for regular users, not admin */}
                       {!isAdmin && (
                         <Link
                           to="/profile"
@@ -137,7 +137,7 @@ function Navbar() {
                           onClick={() => setIsProfileMenuOpen(false)}
                         >
                           <User className="w-4 h-4" />
-                          <span>My Profile</span>
+                          <span>My Riwayat</span>
                         </Link>
                       )}
                       <button

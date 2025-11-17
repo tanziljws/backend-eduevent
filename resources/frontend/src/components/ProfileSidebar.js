@@ -50,7 +50,7 @@ export default function ProfileSidebar() {
 
         <nav className="flex flex-col gap-1 pt-0.5">
           <NavItem to="/profile?section=settings" icon={User} label="Pengaturan Akun" />
-          <NavItem to="/profile?section=transactions" icon={Calendar} label="Daftar Event" />
+          <NavItem to="/profile?section=transactions" icon={Calendar} label="Transaksi Event" />
           <NavItem to="/profile?section=wishlist" icon={Heart} label="My Wishlist" />
           <NavItem to="/profile?section=password" icon={Lock} label="Atur Kata Sandi" />
         </nav>
