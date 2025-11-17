@@ -75,23 +75,23 @@ class UserController extends Controller
                 try {
                     if (!$reg || !$reg->event) {
                         continue; // Skip if registration or event is missing
-                }
-
-                // Handle date parsing safely
-                try {
-                $eventDate = $reg->event->event_date ? Carbon::parse($reg->event->event_date) : null;
-                if (!$eventDate) {
-                    continue; // Skip if event_date is null
                     }
-                } catch (\Exception $e) {
-                    Log::warning('Error parsing event_date', [
-                        'registration_id' => $reg->id,
-                        'event_id' => $reg->event->id ?? null,
-                        'event_date' => $reg->event->event_date ?? null,
-                        'error' => $e->getMessage(),
-                    ]);
-                    continue; // Skip this registration
-                }
+
+                    // Handle date parsing safely
+                    try {
+                        $eventDate = $reg->event->event_date ? Carbon::parse($reg->event->event_date) : null;
+                        if (!$eventDate) {
+                            continue; // Skip if event_date is null
+                        }
+                    } catch (\Exception $e) {
+                        Log::warning('Error parsing event_date', [
+                            'registration_id' => $reg->id,
+                            'event_id' => $reg->event->id ?? null,
+                            'event_date' => $reg->event->event_date ?? null,
+                            'error' => $e->getMessage(),
+                        ]);
+                        continue; // Skip this registration
+                    }
 
                 // Handle start_time and end_time (they're already Carbon instances from Event model)
                 try {
