@@ -464,20 +464,21 @@ class UserController extends Controller
             // Download the file
         return Storage::disk('public')->download(
             $certificate->certificate_path,
-            'certificate-' . $certificate->certificate_number . '.pdf'
-        );
+                'certificate-' . ($certificate->certificate_number ?: 'certificate-' . $certificate->id) . '.pdf'
+            );
         } catch (\Exception $e) {
             // Log the error for debugging
             Log::error('Certificate download error', [
-                'certificate_id' => $certificate->id,
-                'certificate_path' => $certificate->certificate_path,
+                'certificate_id' => $certificate->id ?? null,
+                'certificate_path' => $certificate->certificate_path ?? null,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
             
+            // Return JSON error instead of throwing exception
             return response()->json([
                 'success' => false,
-                'message' => 'Error downloading certificate: ' . $e->getMessage() . '. Certificate may still be processing.',
+                'message' => 'Error downloading certificate: ' . $e->getMessage() . '. Please try again or contact support.',
             ], 500);
         }
     }
@@ -628,6 +629,11 @@ class UserController extends Controller
      */
     private function generateCertificatePdf($user, $event, $certificateNumber, $registration)
     {
+        // Validate required data
+        if (!$user || !$event) {
+            throw new \Exception('User or Event data is missing');
+        }
+        
         // Format event date
         $eventDate = $event->event_date 
             ? Carbon::parse($event->event_date)->locale('id')->translatedFormat('d F Y')
@@ -790,16 +796,27 @@ class UserController extends Controller
         </body>
         </html>';
         
+        // Check if Dompdf is available
+        if (!class_exists('Dompdf\Dompdf')) {
+            throw new \Exception('PDF generation library (Dompdf) is not installed. Please install it via composer.');
+        }
+        
         // Configure Dompdf
         $options = new Options();
         $options->set('isHtml5ParserEnabled', true);
         $options->set('isRemoteEnabled', true);
         $options->set('defaultFont', 'Times New Roman');
+        $options->set('chroot', base_path());
         
         $dompdf = new Dompdf($options);
         $dompdf->loadHtml($html);
         $dompdf->setPaper('A4', 'landscape');
-        $dompdf->render();
+        
+        try {
+            $dompdf->render();
+        } catch (\Exception $e) {
+            throw new \Exception('Failed to render PDF: ' . $e->getMessage());
+        }
         
         return $dompdf->output();
     }
