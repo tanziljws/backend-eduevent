@@ -539,14 +539,31 @@ class UserController extends Controller
      */
     public function generateCertificate(Request $request, $id)
     {
+        // Log request for debugging
+        Log::info('Certificate generation request', [
+            'registration_id' => $id,
+            'has_auth_header' => $request->hasHeader('Authorization'),
+            'bearer_token' => $request->bearerToken() ? 'present' : 'missing',
+        ]);
+        
         $user = $request->user();
         
         if (!$user) {
+            Log::warning('Certificate generation failed: User not authenticated', [
+                'registration_id' => $id,
+                'has_auth_header' => $request->hasHeader('Authorization'),
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized. Please login.',
             ], 401);
         }
+        
+        Log::info('User authenticated for certificate generation', [
+            'registration_id' => $id,
+            'user_id' => $user->id,
+        ]);
         
         // Check registration status - Railway DB uses 'registered'/'cancelled', new schema uses 'pending'/'confirmed'/'cancelled'/'completed'
         $registration = EventRegistration::where('id', $id)

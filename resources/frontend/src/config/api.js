@@ -17,9 +17,11 @@ const api = axios.create({
 // Request interceptor untuk menambahkan token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      console.warn('No auth token found in localStorage for request:', config.url);
     }
     return config;
   },
@@ -33,10 +35,21 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      console.error('401 Unauthorized - Token expired or invalid:', {
+        url: error.config?.url,
+        message: error.response?.data?.message,
+        hasToken: !!localStorage.getItem('auth_token'),
+      });
+      
       // Token expired atau invalid
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      
+      // Only redirect if not already on login page
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

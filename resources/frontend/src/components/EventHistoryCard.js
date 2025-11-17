@@ -43,6 +43,14 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
       return;
     }
     
+    // Check if user is authenticated
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+    if (!token) {
+      alert('Anda belum login. Silakan login terlebih dahulu.');
+      window.location.href = '/login';
+      return;
+    }
+    
     // If certificate is still pending and not available, show message
     if (certificate.status === 'pending' && !certificate.available) {
       alert('Sertifikat masih dalam proses. Silakan coba lagi dalam beberapa saat atau refresh halaman.');
@@ -103,8 +111,17 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
       return;
     }
     
+    // Check if user is authenticated
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+    if (!token) {
+      alert('Anda belum login. Silakan login terlebih dahulu.');
+      window.location.href = '/login';
+      return;
+    }
+    
     try {
       setIsGenerating(true);
+      console.log('Generating certificate for registration:', registration_id);
       const response = await eventService.generateCertificate(registration_id, {});
       
       if (response.success) {
