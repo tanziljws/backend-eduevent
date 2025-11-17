@@ -689,6 +689,13 @@ class EventController extends Controller
             ->where('status', '!=', 'paid')
             ->first();
 
+        // Get or generate order_id
+        $orderId = null;
+        if ($payment) {
+            // Get existing order_id from payment
+            $orderId = $payment->order_id ?? $payment->midtrans_order_id ?? null;
+        }
+        
         if (!$payment) {
             // Prepare payment data based on table schema
             $paymentData = [
@@ -705,7 +712,7 @@ class EventController extends Controller
                 $paymentData['user_id'] = $user->id;
             }
             
-            // Set order_id or midtrans_order_id based on which column exists
+            // Generate order_id
             $orderId = 'EVENT-' . $id . '-' . $user->id . '-' . time();
             if ($hasOrderIdColumn) {
                 $paymentData['order_id'] = $orderId;
@@ -714,6 +721,15 @@ class EventController extends Controller
             }
             
             $payment = Payment::create($paymentData);
+        } else if (!$orderId) {
+            // If payment exists but no order_id, generate one and update
+            $orderId = 'EVENT-' . $id . '-' . $user->id . '-' . time();
+            if ($hasOrderIdColumn) {
+                $payment->order_id = $orderId;
+            } elseif ($hasMidtransOrderIdColumn) {
+                $payment->midtrans_order_id = $orderId;
+            }
+            $payment->save();
         }
 
         // Generate snap_token from Midtrans API
