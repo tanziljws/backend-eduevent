@@ -472,7 +472,7 @@ class UserController extends Controller
                 'bearer_token' => $request->bearerToken() ? 'present' : 'missing',
             ]);
             
-            $user = $request->user();
+        $user = $request->user();
             
             // If user is not authenticated via header, try to authenticate via query parameter token
             if (!$user && $request->has('token')) {
@@ -503,8 +503,8 @@ class UserController extends Controller
                 'user_id' => $user->id,
             ]);
             
-            $certificate = Certificate::where('id', $id)
-                ->where('user_id', $user->id)
+        $certificate = Certificate::where('id', $id)
+            ->where('user_id', $user->id)
                 ->with(['registration', 'event', 'user'])
                 ->first();
 
@@ -514,11 +514,11 @@ class UserController extends Controller
                     'user_id' => $user->id,
                 ]);
                 
-                return response()->json([
-                    'success' => false,
+            return response()->json([
+                'success' => false,
                     'message' => 'Certificate not found or you do not have access to this certificate.',
-                ], 404);
-            }
+            ], 404);
+        }
 
             Log::info('Certificate found', [
                 'certificate_id' => $certificate->id,
@@ -689,15 +689,45 @@ class UserController extends Controller
             ]);
             
             // Use response()->download() for better compatibility with blob downloads
-            return response()->download($filePath, $filename, [
-                'Content-Type' => 'application/pdf',
-            ]);
+            try {
+                return response()->download($filePath, $filename, [
+                    'Content-Type' => 'application/pdf',
+                ]);
+            } catch (\Exception $downloadError) {
+                Log::error('Error in response()->download()', [
+                    'certificate_id' => $certificate->id,
+                    'file_path' => $filePath,
+                    'error' => $downloadError->getMessage(),
+                    'trace' => $downloadError->getTraceAsString(),
+                ]);
+                
+                // Fallback: try to read file and return as response
+                try {
+                    $fileContent = file_get_contents($filePath);
+                    return response($fileContent, 200, [
+                        'Content-Type' => 'application/pdf',
+                        'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                        'Content-Length' => strlen($fileContent),
+                    ]);
+                } catch (\Exception $readError) {
+                    Log::error('Error reading certificate file', [
+                        'certificate_id' => $certificate->id,
+                        'file_path' => $filePath,
+                        'error' => $readError->getMessage(),
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Error reading certificate file: ' . $readError->getMessage(),
+                    ], 500);
+                }
+            }
             
         } catch (\Exception $e) {
             // Log the error for debugging
             Log::error('Certificate download error', [
                 'certificate_id' => $id ?? null,
-                'user_id' => $user->id ?? null,
+                'user_id' => isset($user) ? $user->id : null,
                 'error' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
