@@ -17,12 +17,21 @@ import {
 } from 'lucide-react';
 import { userService } from '../services/userService';
 import { eventService } from '../services/eventService';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const EventHistoryCard = ({ eventData, onRefresh }) => {
-  const { event, attendance, certificate, registration_date, overall_status, registration_id } = eventData;
+  const { event, attendance, certificate: initialCertificate, registration_date, overall_status, registration_id } = eventData;
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [localCertificate, setLocalCertificate] = useState(initialCertificate);
+  
+  // Update local certificate when eventData changes
+  useEffect(() => {
+    setLocalCertificate(eventData.certificate);
+  }, [eventData.certificate]);
+  
+  // Use local certificate if available, otherwise use initial
+  const certificate = localCertificate || initialCertificate;
 
   // Handle certificate download
   const handleDownloadCertificate = async (e) => {
@@ -60,17 +69,29 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
       const response = await eventService.generateCertificate(registration_id, {});
       
       if (response.success) {
+        // Update local certificate state immediately
+        if (response.certificate) {
+          setLocalCertificate({
+            id: response.certificate.id,
+            available: response.certificate.available || false,
+            status: response.certificate.status,
+            certificate_number: response.certificate.certificate_number,
+            certificate_url: response.certificate.certificate_url,
+          });
+        }
+        
         // If certificate is available, show success message
         if (response.certificate?.available) {
-          alert('Sertifikat sudah tersedia. Halaman akan dimuat ulang.');
+          alert('Sertifikat sudah tersedia!');
         } else {
-          alert('Sertifikat sedang diproses. Halaman akan dimuat ulang.');
+          alert('Sertifikat sedang diproses. Silakan refresh halaman dalam beberapa saat.');
         }
-        // Refresh data after a short delay to update the UI
+        
+        // Refresh data after a short delay to update the UI with latest data
         if (onRefresh) {
           setTimeout(() => {
             onRefresh();
-          }, 1000);
+          }, 1500);
         }
       } else {
         alert(response.message || 'Gagal membuat sertifikat. Silakan coba lagi.');
