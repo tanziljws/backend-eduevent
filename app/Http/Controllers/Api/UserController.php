@@ -94,17 +94,17 @@ class UserController extends Controller
 
                 // Handle start_time and end_time (they're already Carbon instances from Event model)
                 try {
-                    $startTime = $reg->event->start_time 
-                        ? ($reg->event->start_time instanceof \Carbon\Carbon 
-                            ? $reg->event->start_time->copy()->setDateFrom($eventDate) 
-                            : ($reg->event->event_date ? Carbon::parse($reg->event->event_date . ' ' . $reg->event->start_time) : $eventDate->copy()->setTime(0, 0)))
-                        : $eventDate->copy()->setTime(0, 0);
-                    
-                    $endTime = $reg->event->end_time 
-                        ? ($reg->event->end_time instanceof \Carbon\Carbon 
-                            ? $reg->event->end_time->copy()->setDateFrom($eventDate)
-                            : ($reg->event->event_date ? Carbon::parse($reg->event->event_date . ' ' . $reg->event->end_time) : $startTime->copy()->addHours(8)))
-                        : $startTime->copy()->addHours(8);
+                $startTime = $reg->event->start_time 
+                    ? ($reg->event->start_time instanceof \Carbon\Carbon 
+                        ? $reg->event->start_time->copy()->setDateFrom($eventDate) 
+                        : ($reg->event->event_date ? Carbon::parse($reg->event->event_date . ' ' . $reg->event->start_time) : $eventDate->copy()->setTime(0, 0)))
+                    : $eventDate->copy()->setTime(0, 0);
+                
+                $endTime = $reg->event->end_time 
+                    ? ($reg->event->end_time instanceof \Carbon\Carbon 
+                        ? $reg->event->end_time->copy()->setDateFrom($eventDate)
+                        : ($reg->event->event_date ? Carbon::parse($reg->event->event_date . ' ' . $reg->event->end_time) : $startTime->copy()->addHours(8)))
+                    : $startTime->copy()->addHours(8);
                 } catch (\Exception $e) {
                     Log::warning('Error parsing start_time/end_time', [
                         'registration_id' => $reg->id,
@@ -274,10 +274,10 @@ class UserController extends Controller
                                 'error' => $e->getMessage(),
                             ]);
                             return [
-                                'id' => $reg->certificate->id ?? null,
+                        'id' => $reg->certificate->id ?? null,
                                 'available' => false,
-                                'status' => $reg->certificate->status ?? null,
-                                'certificate_number' => $reg->certificate->certificate_number ?? null,
+                        'status' => $reg->certificate->status ?? null,
+                        'certificate_number' => $reg->certificate->certificate_number ?? null,
                                 'certificate_url' => null,
                                 'issued_at' => null,
                             ];
@@ -589,43 +589,18 @@ class UserController extends Controller
             }
 
             // Download the file
-            Log::info('Preparing to download certificate file', [
-                'certificate_id' => $certificate->id,
-                'certificate_path' => $certificate->certificate_path,
-            ]);
-            
             $filePath = Storage::disk('public')->path($certificate->certificate_path);
             
-            Log::info('File path resolved', [
-                'certificate_id' => $certificate->id,
-                'file_path' => $filePath,
-                'file_exists' => file_exists($filePath),
-            ]);
-            
             if (!file_exists($filePath)) {
-                Log::error('Certificate file not found on disk', [
-                    'certificate_id' => $certificate->id,
-                    'certificate_path' => $certificate->certificate_path,
-                    'resolved_path' => $filePath,
-                ]);
-                
                 return response()->json([
                     'success' => false,
                     'message' => 'Certificate file not found at path: ' . $certificate->certificate_path,
                 ], 404);
             }
             
-            $filename = 'certificate-' . ($certificate->certificate_number ?: 'certificate-' . $certificate->id) . '.pdf';
-            
-            Log::info('Returning certificate file for download', [
-                'certificate_id' => $certificate->id,
-                'filename' => $filename,
-                'file_size' => filesize($filePath),
-            ]);
-            
-            // Use response()->download() instead of response()->file() for better reliability
-            return response()->download($filePath, $filename, [
+            return response()->file($filePath, [
                 'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="certificate-' . ($certificate->certificate_number ?: 'certificate-' . $certificate->id) . '.pdf"',
             ]);
             
         } catch (\Exception $e) {
