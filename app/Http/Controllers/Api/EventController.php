@@ -735,9 +735,33 @@ class EventController extends Controller
         // Generate snap_token from Midtrans API
         $snapToken = null;
         
+        // Validate order_id exists
+        if (!$orderId) {
+            Log::error('Order ID is missing for payment', [
+                'payment_id' => $payment->id,
+                'registration_id' => $registration->id,
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal membuat order ID. Silakan coba lagi.',
+            ], 500);
+        }
+        
         // Check if Midtrans is configured
         $midtransServerKey = config('services.midtrans.server_key') ?? env('MIDTRANS_SERVER_KEY');
         $midtransIsProduction = config('services.midtrans.is_production') ?? env('MIDTRANS_IS_PRODUCTION', false);
+        
+        if (!$midtransServerKey) {
+            Log::warning('Midtrans server key not configured', [
+                'payment_id' => $payment->id,
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'MIDTRANS_SERVER_KEY belum dikonfigurasi di server. Silakan hubungi admin untuk mengkonfigurasi payment gateway.',
+                'payment_id' => $payment->id,
+                'snap_token' => null,
+            ], 400);
+        }
         
         if ($midtransServerKey) {
             try {
@@ -773,6 +797,13 @@ class EventController extends Controller
                     ? 'https://app.midtrans.com/snap/v1/transactions'
                     : 'https://app.sandbox.midtrans.com/snap/v1/transactions';
                 
+                Log::info('Calling Midtrans API', [
+                    'url' => $midtransUrl,
+                    'order_id' => $orderId,
+                    'amount' => $payment->amount,
+                    'is_production' => $midtransIsProduction,
+                ]);
+                
                 $ch = curl_init($midtransUrl);
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch, CURLOPT_POST, true);
@@ -785,7 +816,19 @@ class EventController extends Controller
                 
                 $response = curl_exec($ch);
                 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $curlError = curl_error($ch);
                 curl_close($ch);
+                
+                if ($curlError) {
+                    Log::error('CURL error when calling Midtrans API', [
+                        'error' => $curlError,
+                        'payment_id' => $payment->id,
+                    ]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Gagal menghubungi payment gateway. Silakan coba lagi nanti.',
+                    ], 500);
+                }
                 
                 if ($httpCode === 200 && $response) {
                     $midtransResponse = json_decode($response, true);
@@ -800,17 +843,25 @@ class EventController extends Controller
                             'order_id' => $orderId,
                             'amount' => $payment->amount,
                         ]);
+                    } else {
+                        Log::error('Midtrans response missing token', [
+                            'http_code' => $httpCode,
+                            'response' => $response,
+                            'payment_id' => $payment->id,
+                        ]);
                     }
                 } else {
                     Log::error('Failed to generate Midtrans snap_token', [
                         'http_code' => $httpCode,
                         'response' => $response,
                         'payment_id' => $payment->id,
+                        'order_id' => $orderId,
                     ]);
                 }
             } catch (\Exception $e) {
                 Log::error('Exception generating Midtrans snap_token', [
                     'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
                     'payment_id' => $payment->id,
                 ]);
             }
