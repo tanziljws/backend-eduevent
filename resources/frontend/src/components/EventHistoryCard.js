@@ -135,8 +135,8 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
                 {statusConfig.icon}
                 <span className="ml-1">{statusConfig.text}</span>
               </Badge>
-              {/* Show certificate badge if event is completed and user attended */}
-              {(overall_status === 'completed' || (overall_status === 'attended' && attendance?.is_present)) && (
+              {/* Show certificate badge if event is completed/attended */}
+              {(overall_status === 'completed' || overall_status === 'attended') && (
                 <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 border">
                   <Award className="w-3 h-3 mr-1" />
                   Sertifikat
@@ -244,8 +244,8 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
             </Link>
           </Button>
 
-          {/* Show certificate button for completed events where user attended */}
-          {(overall_status === 'completed' || (overall_status === 'attended' && attendance?.is_present)) && (
+          {/* Show certificate button for completed/attended events */}
+          {(overall_status === 'completed' || overall_status === 'attended') && (
             certificate?.available && certificate?.id ? (
               // Certificate exists - show download button
               <Button
@@ -271,7 +271,7 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
             )
           )}
 
-          {overall_status === 'upcoming' && !attendance.is_present && (
+          {overall_status === 'upcoming' && !attendance?.is_present && (
             <Button
               asChild
               size="sm"
