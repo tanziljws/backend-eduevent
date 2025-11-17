@@ -500,6 +500,12 @@ class UserController extends Controller
         try {
             $pdf = $this->generateCertificatePdf($userData, $event, $certificateNumber, $registration);
             
+            // Ensure certificates directory exists
+            $certificatesDir = storage_path('app/public/certificates');
+            if (!file_exists($certificatesDir)) {
+                mkdir($certificatesDir, 0755, true);
+            }
+            
             // Save PDF to storage
             Storage::disk('public')->put($certificatePath, $pdf);
             
