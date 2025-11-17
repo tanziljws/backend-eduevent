@@ -540,10 +540,18 @@ class UserController extends Controller
     public function generateCertificate(Request $request, $id)
     {
         $user = $request->user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Please login.',
+            ], 401);
+        }
+        
         // Check registration status - Railway DB uses 'registered'/'cancelled', new schema uses 'pending'/'confirmed'/'cancelled'/'completed'
         $registration = EventRegistration::where('id', $id)
             ->where('user_id', $user->id)
-            ->with(['event'])
+            ->with(['event', 'attendance'])
             ->first();
         
         if (!$registration) {
@@ -551,6 +559,21 @@ class UserController extends Controller
                 'success' => false,
                 'message' => 'Registrasi tidak ditemukan atau Anda tidak memiliki akses.',
             ], 404);
+        }
+        
+        if (!$registration->event) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Event tidak ditemukan.',
+            ], 404);
+        }
+        
+        // Check if user has attended the event
+        if (!$registration->attendance || $registration->attendance->status !== 'present') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda belum hadir di event ini. Sertifikat hanya dapat dibuat untuk peserta yang sudah hadir.',
+            ], 400);
         }
         
         if (!in_array($registration->status, ['confirmed', 'registered', 'completed'])) {
@@ -600,16 +623,37 @@ class UserController extends Controller
         
         // Generate PDF certificate
         try {
+            Log::info('Starting certificate generation', [
+                'registration_id' => $id,
+                'user_id' => $user->id,
+                'event_id' => $event->id,
+            ]);
+            
             $pdf = $this->generateCertificatePdf($userData, $event, $certificateNumber, $registration);
+            
+            Log::info('PDF generated successfully', [
+                'registration_id' => $id,
+                'pdf_size' => strlen($pdf),
+            ]);
             
             // Ensure certificates directory exists
             $certificatesDir = storage_path('app/public/certificates');
             if (!file_exists($certificatesDir)) {
-                mkdir($certificatesDir, 0755, true);
+                if (!mkdir($certificatesDir, 0755, true)) {
+                    throw new \Exception('Failed to create certificates directory: ' . $certificatesDir);
+                }
+                Log::info('Created certificates directory', ['path' => $certificatesDir]);
             }
             
             // Save PDF to storage
-            Storage::disk('public')->put($certificatePath, $pdf);
+            if (!Storage::disk('public')->put($certificatePath, $pdf)) {
+                throw new \Exception('Failed to save PDF file to storage: ' . $certificatePath);
+            }
+            
+            Log::info('PDF saved to storage', [
+                'registration_id' => $id,
+                'path' => $certificatePath,
+            ]);
             
             // Create certificate record
         $certificate = Certificate::create([
@@ -620,6 +664,11 @@ class UserController extends Controller
                 'certificate_path' => $certificatePath,
                 'status' => 'issued',
                 'issued_at' => now(),
+            ]);
+
+            Log::info('Certificate record created', [
+                'registration_id' => $id,
+                'certificate_id' => $certificate->id,
         ]);
 
         return response()->json([
@@ -636,6 +685,8 @@ class UserController extends Controller
         } catch (\Exception $e) {
             Log::error('Certificate PDF generation failed', [
                 'registration_id' => $id,
+                'user_id' => $user->id,
+                'event_id' => $event->id ?? null,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);

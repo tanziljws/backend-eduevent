@@ -137,7 +137,16 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
       }
     } catch (error) {
       console.error('Error generating certificate:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Gagal membuat sertifikat';
+      let errorMessage = 'Gagal membuat sertifikat';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       alert(`Error: ${errorMessage}. Silakan coba lagi.`);
     } finally {
       setIsGenerating(false);
