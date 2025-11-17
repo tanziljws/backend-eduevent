@@ -85,8 +85,8 @@ class UserController extends Controller
                 } catch (\Exception $e) {
                     Log::warning('Error parsing event_date', [
                         'registration_id' => $reg->id,
-                        'event_id' => $reg->event->id,
-                        'event_date' => $reg->event->event_date,
+                        'event_id' => $reg->event->id ?? null,
+                        'event_date' => $reg->event->event_date ?? null,
                         'error' => $e->getMessage(),
                     ]);
                     continue; // Skip this registration
@@ -108,7 +108,7 @@ class UserController extends Controller
                 } catch (\Exception $e) {
                     Log::warning('Error parsing start_time/end_time', [
                         'registration_id' => $reg->id,
-                        'event_id' => $reg->event->id,
+                        'event_id' => $reg->event->id ?? null,
                         'error' => $e->getMessage(),
                     ]);
                     // Use default times
@@ -163,14 +163,24 @@ class UserController extends Controller
                     'token_plain' => $reg->attendance_token ?? null, // Use attendance_token from registration
                     'overall_status' => $overallStatus,
                     'event' => [
-                        'id' => $reg->event->id,
-                        'title' => $reg->event->title,
-                        'description' => $reg->event->description,
-                        'event_date' => $reg->event->event_date?->format('Y-m-d'),
+                        'id' => $reg->event->id ?? null,
+                        'title' => $reg->event->title ?? 'N/A',
+                        'description' => $reg->event->description ?? null,
+                        'event_date' => $reg->event->event_date ? (function() use ($reg) {
+                            try {
+                                return $reg->event->event_date instanceof \Carbon\Carbon 
+                                    ? $reg->event->event_date->format('Y-m-d')
+                                    : Carbon::parse($reg->event->event_date)->format('Y-m-d');
+                            } catch (\Exception $e) {
+                                return null;
+                            }
+                        })() : null,
                         'formatted_date' => $reg->event->event_date 
                             ? (function() use ($reg) {
                                 try {
-                                    $date = Carbon::parse($reg->event->event_date);
+                                    $date = $reg->event->event_date instanceof \Carbon\Carbon 
+                                        ? $reg->event->event_date 
+                                        : Carbon::parse($reg->event->event_date);
                                     // Try to use Indonesian locale, fallback to English if not available
                                     try {
                                         return $date->locale('id')->translatedFormat('l, d F Y');
@@ -179,28 +189,53 @@ class UserController extends Controller
                                     }
                                 } catch (\Exception $e) {
                                     // If parsing fails completely, return raw date
-                                    return $reg->event->event_date ? date('l, d F Y', strtotime($reg->event->event_date)) : 'N/A';
+                                    try {
+                                        return $reg->event->event_date ? date('l, d F Y', strtotime($reg->event->event_date)) : 'N/A';
+                                    } catch (\Exception $e2) {
+                                        return 'N/A';
+                                    }
                                 }
                             })()
                             : 'N/A',
                         'start_time' => $reg->event->start_time 
-                            ? ($reg->event->start_time instanceof \Carbon\Carbon 
-                                ? $reg->event->start_time->format('H:i:s') 
-                                : (is_string($reg->event->start_time) ? $reg->event->start_time : null))
+                            ? (function() use ($reg) {
+                                try {
+                                    return $reg->event->start_time instanceof \Carbon\Carbon 
+                                        ? $reg->event->start_time->format('H:i:s') 
+                                        : (is_string($reg->event->start_time) ? $reg->event->start_time : null);
+                                } catch (\Exception $e) {
+                                    return null;
+                                }
+                            })()
                             : null,
                         'formatted_time' => $reg->event->start_time 
-                            ? ($reg->event->start_time instanceof \Carbon\Carbon 
-                                ? $reg->event->start_time->format('H:i') 
-                                : (is_string($reg->event->start_time) && strlen($reg->event->start_time) >= 5 ? substr($reg->event->start_time, 0, 5) : 'N/A'))
+                            ? (function() use ($reg) {
+                                try {
+                                    if ($reg->event->start_time instanceof \Carbon\Carbon) {
+                                        return $reg->event->start_time->format('H:i');
+                                    } elseif (is_string($reg->event->start_time) && strlen($reg->event->start_time) >= 5) {
+                                        return substr($reg->event->start_time, 0, 5);
+                                    }
+                                    return 'N/A';
+                                } catch (\Exception $e) {
+                                    return 'N/A';
+                                }
+                            })()
                             : 'N/A',
                         'end_time' => $reg->event->end_time 
-                            ? ($reg->event->end_time instanceof \Carbon\Carbon 
-                                ? $reg->event->end_time->format('H:i:s') 
-                                : (is_string($reg->event->end_time) ? $reg->event->end_time : null))
+                            ? (function() use ($reg) {
+                                try {
+                                    return $reg->event->end_time instanceof \Carbon\Carbon 
+                                        ? $reg->event->end_time->format('H:i:s') 
+                                        : (is_string($reg->event->end_time) ? $reg->event->end_time : null);
+                                } catch (\Exception $e) {
+                                    return null;
+                                }
+                            })()
                             : null,
-                        'location' => $reg->event->location,
-                        'category' => $reg->event->category,
-                        'flyer_url' => $reg->event->flyer_url,
+                        'location' => $reg->event->location ?? null,
+                        'category' => $reg->event->category ?? null,
+                        'flyer_url' => $reg->event->flyer_url ?? null,
                     ],
                     'attendance' => $reg->attendance ? [
                         'id' => $reg->attendance->id ?? null,
