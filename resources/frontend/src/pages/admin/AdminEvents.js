@@ -430,7 +430,15 @@ const AdminEvents = () => {
       await adminService.exportEventParticipants(eventId, 'csv');
     } catch (error) {
       console.error('Export error:', error);
-      alert('Gagal mengekspor data peserta. Silakan coba lagi.');
+      const errorMessage = error.message || 'Gagal mengekspor data peserta. Silakan coba lagi.';
+      alert(errorMessage);
+      
+      // If authentication error, redirect to login
+      if (error.message && (error.message.includes('login') || error.message.includes('sesi'))) {
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 2000);
+      }
     } finally {
       setExportingEventId(null);
     }

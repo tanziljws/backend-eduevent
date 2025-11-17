@@ -51,16 +51,17 @@ const AdminDashboard = () => {
   const handleExport = async (type, format = 'csv') => {
     try {
       setExportingType(type);
-      const res = await adminService.exportData(type, format);
-      if (res && res.fallback) return;
+      await adminService.exportData(type, format);
     } catch (error) {
       console.error('Export error:', error);
-      const directUrl = `/api/admin/export?type=${type}&format=${format}`;
-      try {
-        window.open(directUrl, '_blank');
-        return;
-      } catch (_) {
-        alert('Gagal mengekspor data. Silakan coba lagi.');
+      const errorMessage = error.message || 'Gagal mengekspor data. Silakan coba lagi.';
+      alert(errorMessage);
+      
+      // If authentication error, redirect to login
+      if (error.message && (error.message.includes('login') || error.message.includes('sesi'))) {
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 2000);
       }
     } finally {
       setExportingType(null);

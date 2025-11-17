@@ -53,9 +53,29 @@ export const adminService = {
   exportData: async (type = 'events', format = 'csv') => {
     try {
       const api = createAxiosInstance();
+      
+      // Check if token exists
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Anda harus login sebagai admin untuk mengekspor data.');
+      }
+      
       const response = await api.get(`/admin/export?type=${type}&format=${format}`, {
         responseType: 'blob'
       });
+
+      // Check if response is actually an error (blob might contain JSON error)
+      if (response.data instanceof Blob && response.data.type === 'application/json') {
+        const text = await response.data.text();
+        try {
+          const errorData = JSON.parse(text);
+          if (!errorData.success) {
+            throw new Error(errorData.message || 'Gagal mengekspor data.');
+          }
+        } catch (e) {
+          // If not JSON, continue with download
+        }
+      }
 
       // Try to extract filename from headers
       const disposition = response.headers && (response.headers['content-disposition'] || response.headers['Content-Disposition']);
@@ -80,23 +100,29 @@ export const adminService = {
     } catch (error) {
       // Log detailed error info
       const status = error?.response?.status;
-      let bodyText = '';
-      try {
-        if (error?.response?.data && typeof error.response.data.text === 'function') {
-          bodyText = await error.response.data.text();
+      let errorMessage = error.message || 'Gagal mengekspor data.';
+      
+      // Try to extract error message from blob response
+      if (error?.response?.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          // If can't parse, use default message
         }
-      } catch (_) {}
-      console.error('Export error:', { status, message: error.message, body: bodyText });
-
-      // Fallback: open direct download URL in new tab to bypass CORS/blob handling
-      const directUrl = `${API_BASE_URL}/admin/export?type=${type}&format=${format}`;
-      try {
-        window.open(directUrl, '_blank');
-        return { fallback: true };
-      } catch (_) {
-        // Surface server error message if available
-        throw error;
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
       }
+      
+      console.error('Export error:', { status, message: errorMessage, error });
+      
+      // Check if it's authentication error
+      if (status === 401 || status === 403) {
+        throw new Error('Sesi Anda telah berakhir. Silakan login ulang sebagai admin.');
+      }
+      
+      throw new Error(errorMessage);
     }
   },
 
@@ -202,22 +228,78 @@ export const adminService = {
   },
 
   exportEventParticipants: async (eventId, format = 'csv') => {
-    const api = createAxiosInstance();
-    const response = await api.get(`/admin/events/${eventId}/export?format=${format}`, {
-      responseType: 'blob'
-    });
-    
-    // Create download link
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `event_${eventId}_participants.${format}`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-    
-    return response;
+    try {
+      const api = createAxiosInstance();
+      
+      // Check if token exists
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Anda harus login sebagai admin untuk mengekspor data.');
+      }
+      
+      const response = await api.get(`/admin/events/${eventId}/export?format=${format}`, {
+        responseType: 'blob'
+      });
+      
+      // Check if response is actually an error (blob might contain JSON error)
+      if (response.data instanceof Blob && response.data.type === 'application/json') {
+        const text = await response.data.text();
+        try {
+          const errorData = JSON.parse(text);
+          if (!errorData.success) {
+            throw new Error(errorData.message || 'Gagal mengekspor data peserta.');
+          }
+        } catch (e) {
+          // If not JSON, continue with download
+        }
+      }
+      
+      // Try to extract filename from headers
+      const disposition = response.headers && (response.headers['content-disposition'] || response.headers['Content-Disposition']);
+      let filename = `event_${eventId}_participants_${new Date().toISOString().split('T')[0]}.${format}`;
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+        const extracted = decodeURIComponent(match?.[1] || match?.[2] || '').trim();
+        if (extracted) filename = extracted;
+      }
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      return response;
+    } catch (error) {
+      const status = error?.response?.status;
+      let errorMessage = error.message || 'Gagal mengekspor data peserta.';
+      
+      // Try to extract error message from blob response
+      if (error?.response?.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          // If can't parse, use default message
+        }
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      console.error('Export participants error:', { status, message: errorMessage, error });
+      
+      // Check if it's authentication error
+      if (status === 401 || status === 403) {
+        throw new Error('Sesi Anda telah berakhir. Silakan login ulang sebagai admin.');
+      }
+      
+      throw new Error(errorMessage);
+    }
   },
 
   // Admin profile/settings
