@@ -324,14 +324,150 @@ class AdminController extends Controller
      */
     public function export(Request $request)
     {
+        try {
         $type = $request->get('type', 'events');
         $format = $request->get('format', 'csv');
 
-        // TODO: Implement export logic
+            if ($format !== 'csv') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Format tidak didukung. Gunakan format CSV.',
+                ], 400);
+            }
+            
+            if ($type === 'events') {
+                $events = Event::withCount('registrations')->get();
+                
+                $csvData = [];
+                $csvData[] = ['No', 'Judul Event', 'Tanggal', 'Lokasi', 'Kategori', 'Harga', 'Status', 'Jumlah Peserta'];
+                
+                $no = 1;
+                foreach ($events as $event) {
+                    $csvData[] = [
+                        $no++,
+                        $event->title,
+                        $event->event_date ? $event->event_date->format('Y-m-d') : '-',
+                        $event->location ?? '-',
+                        $event->category ?? '-',
+                        $event->is_free ? 'Gratis' : 'Rp ' . number_format($event->price, 0, ',', '.'),
+                        $event->is_published ? 'Published' : 'Draft',
+                        $event->registrations_count ?? 0,
+                    ];
+                }
+                
+                $filename = 'events_' . date('Y-m-d') . '.csv';
+                $output = fopen('php://temp', 'r+');
+                fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
+                foreach ($csvData as $row) {
+                    fputcsv($output, $row);
+                }
+                rewind($output);
+                $csvContent = stream_get_contents($output);
+                fclose($output);
+                
+                return response($csvContent, 200)
+                    ->header('Content-Type', 'text/csv; charset=UTF-8')
+                    ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+                    
+            } elseif ($type === 'registrations' || $type === 'participants') {
+                $hasStatusColumn = Schema::hasColumn('registrations', 'status');
+                $registrationsQuery = EventRegistration::with(['user', 'event', 'attendance']);
+                
+                if ($hasStatusColumn) {
+                    $registrationsQuery->where('status', '!=', 'cancelled');
+                }
+                
+                $registrations = $registrationsQuery->get();
+                
+                $csvData = [];
+                $csvData[] = ['No', 'Nama', 'Email', 'Event', 'Tanggal Event', 'Status', 'Tanggal Daftar', 'Status Kehadiran'];
+                
+                $no = 1;
+                foreach ($registrations as $reg) {
+                    $user = $reg->user;
+                    $event = $reg->event;
+                    $attendance = $reg->attendance;
+                    
+                    $csvData[] = [
+                        $no++,
+                        $user->name ?? $reg->name ?? 'N/A',
+                        $user->email ?? $reg->email ?? 'N/A',
+                        $event->title ?? 'N/A',
+                        $event->event_date ? $event->event_date->format('Y-m-d') : '-',
+                        $reg->status ?? 'registered',
+                        $reg->registered_at ? $reg->registered_at->format('Y-m-d H:i:s') : ($reg->created_at ? $reg->created_at->format('Y-m-d H:i:s') : '-'),
+                        $attendance ? 'Hadir' : 'Tidak hadir',
+                    ];
+                }
+                
+                $filename = 'participants_' . date('Y-m-d') . '.csv';
+                $output = fopen('php://temp', 'r+');
+                fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
+                foreach ($csvData as $row) {
+                    fputcsv($output, $row);
+                }
+                rewind($output);
+                $csvContent = stream_get_contents($output);
+                fclose($output);
+                
+                return response($csvContent, 200)
+                    ->header('Content-Type', 'text/csv; charset=UTF-8')
+                    ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+                    
+            } elseif ($type === 'attendances') {
+                $attendances = Attendance::with(['user', 'event'])->get();
+                
+                $csvData = [];
+                $csvData[] = ['No', 'Nama', 'Email', 'Event', 'Tanggal Event', 'Tanggal Hadir', 'Status'];
+                
+                $no = 1;
+                foreach ($attendances as $att) {
+                    $user = $att->user;
+                    $event = $att->event;
+                    
+                    $csvData[] = [
+                        $no++,
+                        $user->name ?? 'N/A',
+                        $user->email ?? 'N/A',
+                        $event->title ?? 'N/A',
+                        $event->event_date ? $event->event_date->format('Y-m-d') : '-',
+                        $att->checked_in_at ? $att->checked_in_at->format('Y-m-d H:i:s') : ($att->attendance_time ? $att->attendance_time->format('Y-m-d H:i:s') : '-'),
+                        $att->status ?? 'present',
+                    ];
+                }
+                
+                $filename = 'attendances_' . date('Y-m-d') . '.csv';
+                $output = fopen('php://temp', 'r+');
+                fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
+                foreach ($csvData as $row) {
+                    fputcsv($output, $row);
+                }
+                rewind($output);
+                $csvContent = stream_get_contents($output);
+                fclose($output);
+                
+                return response($csvContent, 200)
+                    ->header('Content-Type', 'text/csv; charset=UTF-8')
+                    ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+            }
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Tipe export tidak didukung.',
+            ], 400);
+            
+        } catch (\Exception $e) {
+            Log::error('Error exporting data: ' . $e->getMessage(), [
+                'type' => $request->get('type'),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
         return response()->json([
             'success' => false,
-            'message' => 'Export feature coming soon.',
-        ], 501);
+                'message' => 'Gagal mengekspor data. Silakan coba lagi.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
     }
 
     /**
@@ -413,17 +549,82 @@ class AdminController extends Controller
      */
     public function exportEventParticipants(Request $request, $id)
     {
+        try {
         $event = Event::findOrFail($id);
-        $registrations = EventRegistration::where('event_id', $id)
-            ->where('status', '!=', 'cancelled')
-            ->with('user')
-            ->get();
+            $format = $request->get('format', 'csv');
+            
+            // Get registrations with user data
+            $hasStatusColumn = Schema::hasColumn('registrations', 'status');
+            $registrationsQuery = EventRegistration::where('event_id', $id)
+                ->with(['user', 'attendance']);
+            
+            if ($hasStatusColumn) {
+                $registrationsQuery->where('status', '!=', 'cancelled');
+            }
+            
+            $registrations = $registrationsQuery->get();
 
-        // TODO: Implement CSV/Excel export
+            if ($format === 'csv') {
+                // Prepare CSV data
+                $csvData = [];
+                $csvData[] = ['No', 'Nama', 'Email', 'No. Handphone', 'Status', 'Tanggal Daftar', 'Status Kehadiran', 'Tanggal Hadir'];
+                
+                $no = 1;
+                foreach ($registrations as $reg) {
+                    $user = $reg->user;
+                    $attendance = $reg->attendance;
+                    
+                    $csvData[] = [
+                        $no++,
+                        $user->name ?? $reg->name ?? 'N/A',
+                        $user->email ?? $reg->email ?? 'N/A',
+                        $user->phone ?? $reg->phone ?? '-',
+                        $reg->status ?? 'registered',
+                        $reg->registered_at ? $reg->registered_at->format('Y-m-d H:i:s') : ($reg->created_at ? $reg->created_at->format('Y-m-d H:i:s') : '-'),
+                        $attendance ? ($attendance->status ?? 'present') : 'Tidak hadir',
+                        $attendance && ($attendance->checked_in_at ?? $attendance->attendance_time ?? null) 
+                            ? ($attendance->checked_in_at ?? $attendance->attendance_time)->format('Y-m-d H:i:s')
+                            : '-',
+                    ];
+                }
+                
+                // Generate CSV content
+                $filename = 'event_' . $id . '_participants_' . date('Y-m-d') . '.csv';
+                $output = fopen('php://temp', 'r+');
+                
+                // Add BOM for UTF-8 (for Excel compatibility)
+                fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+                
+                foreach ($csvData as $row) {
+                    fputcsv($output, $row);
+                }
+                
+                rewind($output);
+                $csvContent = stream_get_contents($output);
+                fclose($output);
+                
+                return response($csvContent, 200)
+                    ->header('Content-Type', 'text/csv; charset=UTF-8')
+                    ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+            }
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Format tidak didukung. Gunakan format CSV.',
+            ], 400);
+            
+        } catch (\Exception $e) {
+            Log::error('Error exporting event participants: ' . $e->getMessage(), [
+                'event_id' => $id,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
         return response()->json([
             'success' => false,
-            'message' => 'Export feature coming soon.',
-        ], 501);
+                'message' => 'Gagal mengekspor data peserta. Silakan coba lagi.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
     }
 
     /**

@@ -206,7 +206,8 @@ const EventHistoryCard = ({ eventData }) => {
             </Link>
           </Button>
 
-          {certificate.available && (
+          {/* Show certificate button if certificate is available and has ID */}
+          {certificate?.available && certificate?.id && (
             <Button
               onClick={handleDownloadCertificate}
               size="sm"

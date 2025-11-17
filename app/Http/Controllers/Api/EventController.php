@@ -812,9 +812,9 @@ class EventController extends Controller
             } else {
                 $errorMessage = 'Gagal mendapatkan token pembayaran dari Midtrans. Silakan hubungi admin atau coba lagi nanti.';
                 Log::warning('Failed to generate Midtrans snap_token', [
-                    'payment_id' => $payment->id,
-                    'has_server_key' => !empty($midtransServerKey),
-                ]);
+                'payment_id' => $payment->id,
+                'has_server_key' => !empty($midtransServerKey),
+            ]);
             }
             
             return response()->json([
