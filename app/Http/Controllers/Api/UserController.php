@@ -94,17 +94,17 @@ class UserController extends Controller
 
                 // Handle start_time and end_time (they're already Carbon instances from Event model)
                 try {
-                $startTime = $reg->event->start_time 
-                    ? ($reg->event->start_time instanceof \Carbon\Carbon 
-                        ? $reg->event->start_time->copy()->setDateFrom($eventDate) 
-                        : ($reg->event->event_date ? Carbon::parse($reg->event->event_date . ' ' . $reg->event->start_time) : $eventDate->copy()->setTime(0, 0)))
-                    : $eventDate->copy()->setTime(0, 0);
-                
-                $endTime = $reg->event->end_time 
-                    ? ($reg->event->end_time instanceof \Carbon\Carbon 
-                        ? $reg->event->end_time->copy()->setDateFrom($eventDate)
-                        : ($reg->event->event_date ? Carbon::parse($reg->event->event_date . ' ' . $reg->event->end_time) : $startTime->copy()->addHours(8)))
-                    : $startTime->copy()->addHours(8);
+                    $startTime = $reg->event->start_time 
+                        ? ($reg->event->start_time instanceof \Carbon\Carbon 
+                            ? $reg->event->start_time->copy()->setDateFrom($eventDate) 
+                            : ($reg->event->event_date ? Carbon::parse($reg->event->event_date . ' ' . $reg->event->start_time) : $eventDate->copy()->setTime(0, 0)))
+                        : $eventDate->copy()->setTime(0, 0);
+                    
+                    $endTime = $reg->event->end_time 
+                        ? ($reg->event->end_time instanceof \Carbon\Carbon 
+                            ? $reg->event->end_time->copy()->setDateFrom($eventDate)
+                            : ($reg->event->event_date ? Carbon::parse($reg->event->event_date . ' ' . $reg->event->end_time) : $startTime->copy()->addHours(8)))
+                        : $startTime->copy()->addHours(8);
                 } catch (\Exception $e) {
                     Log::warning('Error parsing start_time/end_time', [
                         'registration_id' => $reg->id,
