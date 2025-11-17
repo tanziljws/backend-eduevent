@@ -72,8 +72,9 @@ class UserController extends Controller
             ];
 
             foreach ($registrations as $reg) {
-                if (!$reg->event) {
-                    continue; // Skip if event is deleted
+                try {
+                    if (!$reg || !$reg->event) {
+                        continue; // Skip if registration or event is missing
                 }
 
                 // Handle date parsing safely
@@ -201,7 +202,7 @@ class UserController extends Controller
                             ? (function() use ($reg) {
                                 try {
                                     return $reg->event->start_time instanceof \Carbon\Carbon 
-                                        ? $reg->event->start_time->format('H:i:s') 
+                                ? $reg->event->start_time->format('H:i:s') 
                                         : (is_string($reg->event->start_time) ? $reg->event->start_time : null);
                                 } catch (\Exception $e) {
                                     return null;
@@ -226,7 +227,7 @@ class UserController extends Controller
                             ? (function() use ($reg) {
                                 try {
                                     return $reg->event->end_time instanceof \Carbon\Carbon 
-                                        ? $reg->event->end_time->format('H:i:s') 
+                                ? $reg->event->end_time->format('H:i:s') 
                                         : (is_string($reg->event->end_time) ? $reg->event->end_time : null);
                                 } catch (\Exception $e) {
                                     return null;
@@ -339,6 +340,16 @@ class UserController extends Controller
                 ];
 
                 $events[] = $eventData;
+                } catch (\Exception $e) {
+                    Log::warning('Error processing registration in eventHistory', [
+                        'registration_id' => $reg->id ?? null,
+                        'error' => $e->getMessage(),
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                    ]);
+                    // Continue to next registration instead of failing entire request
+                    continue;
+                }
             }
 
             return response()->json([
