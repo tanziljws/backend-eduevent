@@ -170,9 +170,16 @@ class UserController extends Controller
                         'formatted_date' => $reg->event->event_date 
                             ? (function() use ($reg) {
                                 try {
-                                    return Carbon::parse($reg->event->event_date)->locale('id')->translatedFormat('l, d F Y');
+                                    $date = Carbon::parse($reg->event->event_date);
+                                    // Try to use Indonesian locale, fallback to English if not available
+                                    try {
+                                        return $date->locale('id')->translatedFormat('l, d F Y');
+                                    } catch (\Exception $e) {
+                                        return $date->format('l, d F Y');
+                                    }
                                 } catch (\Exception $e) {
-                                    return Carbon::parse($reg->event->event_date)->format('l, d F Y');
+                                    // If parsing fails completely, return raw date
+                                    return $reg->event->event_date ? date('l, d F Y', strtotime($reg->event->event_date)) : 'N/A';
                                 }
                             })()
                             : 'N/A',
@@ -211,7 +218,12 @@ class UserController extends Controller
                                     $checkedInAt = $reg->attendance->checked_in_at instanceof \Carbon\Carbon 
                                         ? $reg->attendance->checked_in_at 
                                         : Carbon::parse($reg->attendance->checked_in_at);
-                                    return $checkedInAt->locale('id')->translatedFormat('d F Y, H:i');
+                                    // Try to use Indonesian locale, fallback to English if not available
+                                    try {
+                                        return $checkedInAt->locale('id')->translatedFormat('d F Y, H:i');
+                                    } catch (\Exception $e) {
+                                        return $checkedInAt->format('d F Y, H:i');
+                                    }
                                 } catch (\Exception $e) {
                                     return null;
                                 }
