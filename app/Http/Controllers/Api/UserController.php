@@ -332,14 +332,38 @@ class UserController extends Controller
     public function downloadCertificate(Request $request, $id)
     {
         $user = $request->user();
-        $certificate = Certificate::where('id', $id)
-            ->where('user_id', $user->id)
-            ->firstOrFail();
-
-        if (!$certificate->certificate_path || !Storage::disk('public')->exists($certificate->certificate_path)) {
+        
+        // Check if user is authenticated
+        if (!$user) {
             return response()->json([
                 'success' => false,
-                'message' => 'Certificate file not found.',
+                'message' => 'Unauthorized. Please login to download certificate.',
+            ], 401);
+        }
+        
+        $certificate = Certificate::where('id', $id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (!$certificate) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Certificate not found or you do not have access to this certificate.',
+            ], 404);
+        }
+
+        // Check if certificate file exists
+        if (!$certificate->certificate_path) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Certificate file path not set. Certificate may still be processing.',
+            ], 404);
+        }
+        
+        if (!Storage::disk('public')->exists($certificate->certificate_path)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Certificate file not found. Certificate may still be processing. Please try again later.',
             ], 404);
         }
 
