@@ -220,7 +220,7 @@ class UserController extends Controller
                                         : Carbon::parse($reg->attendance->checked_in_at);
                                     // Try to use Indonesian locale, fallback to English if not available
                                     try {
-                                        return $checkedInAt->locale('id')->translatedFormat('d F Y, H:i');
+                                    return $checkedInAt->locale('id')->translatedFormat('d F Y, H:i');
                                     } catch (\Exception $e) {
                                         return $checkedInAt->format('d F Y, H:i');
                                     }
@@ -237,18 +237,52 @@ class UserController extends Controller
                         'checked_in_at' => null,
                         'formatted_attendance_time' => null,
                     ],
-                    'certificate' => $reg->certificate ? [
-                        'id' => $reg->certificate->id ?? null,
-                        'available' => ($reg->certificate->status ?? null) === 'issued' && ($reg->certificate->certificate_path ?? null) !== null,
-                        'status' => $reg->certificate->status ?? null,
-                        'certificate_number' => $reg->certificate->certificate_number ?? null,
-                        'certificate_url' => $reg->certificate->certificate_url ?? null,
-                        'issued_at' => $reg->certificate->issued_at 
-                            ? (($reg->certificate->issued_at instanceof \Carbon\Carbon) 
-                                ? $reg->certificate->issued_at->toISOString() 
-                                : Carbon::parse($reg->certificate->issued_at)->toISOString())
-                            : null,
-                    ] : [
+                    'certificate' => $reg->certificate ? (function() use ($reg) {
+                        try {
+                            $cert = $reg->certificate;
+                            $certificateUrl = null;
+                            try {
+                                $certificateUrl = $cert->certificate_url;
+                            } catch (\Exception $e) {
+                                // If accessor fails, try to build URL manually
+                                if ($cert->certificate_path) {
+                                    try {
+                                        if (Storage::disk('public')->exists($cert->certificate_path)) {
+                                            $certificateUrl = Storage::disk('public')->url($cert->certificate_path);
+                                        }
+                                    } catch (\Exception $e2) {
+                                        // Ignore
+                                    }
+                                }
+                            }
+                            
+                            return [
+                                'id' => $cert->id ?? null,
+                                'available' => ($cert->status ?? null) === 'issued' && ($cert->certificate_path ?? null) !== null,
+                                'status' => $cert->status ?? null,
+                                'certificate_number' => $cert->certificate_number ?? null,
+                                'certificate_url' => $certificateUrl,
+                                'issued_at' => $cert->issued_at 
+                                    ? (($cert->issued_at instanceof \Carbon\Carbon) 
+                                        ? $cert->issued_at->toISOString() 
+                                        : Carbon::parse($cert->issued_at)->toISOString())
+                                    : null,
+                            ];
+                        } catch (\Exception $e) {
+                            Log::warning('Error processing certificate data', [
+                                'registration_id' => $reg->id,
+                                'error' => $e->getMessage(),
+                            ]);
+                            return [
+                                'id' => $reg->certificate->id ?? null,
+                                'available' => false,
+                                'status' => $reg->certificate->status ?? null,
+                                'certificate_number' => $reg->certificate->certificate_number ?? null,
+                                'certificate_url' => null,
+                                'issued_at' => null,
+                            ];
+                        }
+                    })() : [
                         'id' => null,
                         'available' => false,
                         'status' => null,
