@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import Footer from '../components/Footer';
+import { API_BASE_URL } from '../config/api';
 
 function Contact() {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ function Contact() {
     setLoading(true);
     
     try {
-      const response = await fetch('/api/contact', {
+      const response = await fetch(`${API_BASE_URL}/contact`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
