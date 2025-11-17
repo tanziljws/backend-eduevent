@@ -67,13 +67,12 @@ export const userService = {
       console.log('Token exists:', !!token);
       console.log('API_BASE_URL:', API_BASE_URL);
       
-      // METHOD 1: Try blob download (like admin export)
+      // METHOD 1: Try blob download using api instance (includes Authorization header)
       try {
         console.log('\nTrying METHOD 1: Blob download...');
         
-        const response = await axios.get(downloadUrl, {
+        const response = await api.get(`/certificates/${certificateId}/download`, {
           headers: {
-            'Authorization': token ? `Bearer ${token}` : '',
             'Accept': 'application/pdf,application/octet-stream'
           },
           responseType: 'blob'

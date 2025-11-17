@@ -333,6 +333,18 @@ class UserController extends Controller
     {
         $user = $request->user();
         
+        // If user is not authenticated via header, try to authenticate via query parameter token
+        if (!$user && $request->has('token')) {
+            $token = $request->query('token');
+            if ($token) {
+                // Find the personal access token
+                $personalAccessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+                if ($personalAccessToken) {
+                    $user = $personalAccessToken->tokenable;
+                }
+            }
+        }
+        
         // Check if user is authenticated
         if (!$user) {
             return response()->json([
