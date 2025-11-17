@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\EventController;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\BannerController;
+use App\Http\Controllers\Api\ContactController;
 
 /*
 |--------------------------------------------------------------------------
@@ -23,6 +24,7 @@ use App\Http\Controllers\Api\BannerController;
 Route::get('/events', [EventController::class, 'index']);
 Route::get('/events/{id}', [EventController::class, 'show']);
 Route::get('/banners', [BannerController::class, 'index']); // Public banners endpoint
+Route::post('/contact', [ContactController::class, 'store']); // Contact form submission
 
 // Auth routes (public)
 Route::prefix('auth')->group(function () {
