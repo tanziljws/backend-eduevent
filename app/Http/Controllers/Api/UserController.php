@@ -833,12 +833,26 @@ class UserController extends Controller
         }
         
         // Format event date
-        $eventDate = $event->event_date 
-            ? Carbon::parse($event->event_date)->locale('id')->translatedFormat('d F Y')
-            : 'N/A';
+        $eventDate = 'N/A';
+        if ($event->event_date) {
+            try {
+                $date = Carbon::parse($event->event_date);
+                try {
+                    $eventDate = $date->locale('id')->translatedFormat('d F Y');
+                } catch (\Exception $e) {
+                    $eventDate = $date->format('d F Y');
+                }
+            } catch (\Exception $e) {
+                $eventDate = date('d F Y', strtotime($event->event_date));
+            }
+        }
         
         // Format issued date
-        $issuedDate = now()->locale('id')->translatedFormat('d F Y');
+        try {
+            $issuedDate = now()->locale('id')->translatedFormat('d F Y');
+        } catch (\Exception $e) {
+            $issuedDate = now()->format('d F Y');
+        }
         
         // HTML template for certificate
         $html = '
