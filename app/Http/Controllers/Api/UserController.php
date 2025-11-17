@@ -26,6 +26,16 @@ class UserController extends Controller
         try {
         $user = $request->user();
             
+            if (!$user) {
+                Log::warning('eventHistory: User not authenticated');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. Please login.',
+                ], 401);
+            }
+            
+            Log::info('eventHistory: Fetching event history', ['user_id' => $user->id]);
+            
             // Build query - check if registered_at column exists
             $query = EventRegistration::where('user_id', $user->id);
             
@@ -67,12 +77,23 @@ class UserController extends Controller
                 }
 
                 // Handle date parsing safely
+                try {
                 $eventDate = $reg->event->event_date ? Carbon::parse($reg->event->event_date) : null;
                 if (!$eventDate) {
                     continue; // Skip if event_date is null
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Error parsing event_date', [
+                        'registration_id' => $reg->id,
+                        'event_id' => $reg->event->id,
+                        'event_date' => $reg->event->event_date,
+                        'error' => $e->getMessage(),
+                    ]);
+                    continue; // Skip this registration
                 }
 
                 // Handle start_time and end_time (they're already Carbon instances from Event model)
+                try {
                 $startTime = $reg->event->start_time 
                     ? ($reg->event->start_time instanceof \Carbon\Carbon 
                         ? $reg->event->start_time->copy()->setDateFrom($eventDate) 
@@ -84,6 +105,16 @@ class UserController extends Controller
                         ? $reg->event->end_time->copy()->setDateFrom($eventDate)
                         : ($reg->event->event_date ? Carbon::parse($reg->event->event_date . ' ' . $reg->event->end_time) : $startTime->copy()->addHours(8)))
                     : $startTime->copy()->addHours(8);
+                } catch (\Exception $e) {
+                    Log::warning('Error parsing start_time/end_time', [
+                        'registration_id' => $reg->id,
+                        'event_id' => $reg->event->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    // Use default times
+                    $startTime = $eventDate->copy()->setTime(0, 0);
+                    $endTime = $startTime->copy()->addHours(8);
+                }
 
                 // Determine overall status
                 $overallStatus = 'upcoming';
@@ -137,7 +168,13 @@ class UserController extends Controller
                         'description' => $reg->event->description,
                         'event_date' => $reg->event->event_date?->format('Y-m-d'),
                         'formatted_date' => $reg->event->event_date 
-                            ? Carbon::parse($reg->event->event_date)->locale('id')->translatedFormat('l, d F Y')
+                            ? (function() use ($reg) {
+                                try {
+                                    return Carbon::parse($reg->event->event_date)->locale('id')->translatedFormat('l, d F Y');
+                                } catch (\Exception $e) {
+                                    return Carbon::parse($reg->event->event_date)->format('l, d F Y');
+                                }
+                            })()
                             : 'N/A',
                         'start_time' => $reg->event->start_time 
                             ? ($reg->event->start_time instanceof \Carbon\Carbon 
@@ -231,7 +268,10 @@ class UserController extends Controller
                 ],
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error in eventHistory: ' . $e->getMessage(), [
+            Log::error('Error in eventHistory', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
                 'user_id' => $request->user()?->id,
             ]);
@@ -382,12 +422,12 @@ class UserController extends Controller
                     'user_id' => $user->id,
                 ]);
                 
-                return response()->json([
-                    'success' => false,
+            return response()->json([
+                'success' => false,
                     'message' => 'Certificate not found or you do not have access to this certificate.',
-                ], 404);
-            }
-            
+            ], 404);
+        }
+
             Log::info('Certificate found', [
                 'certificate_id' => $certificate->id,
                 'certificate_path' => $certificate->certificate_path,
@@ -660,7 +700,7 @@ class UserController extends Controller
         if ($certificate) {
             // If certificate already exists and is issued, return it
             if ($certificate->status === 'issued' && $certificate->certificate_path) {
-                return response()->json([
+            return response()->json([
                     'success' => true,
                     'message' => 'Certificate sudah tersedia.',
                     'certificate' => [
