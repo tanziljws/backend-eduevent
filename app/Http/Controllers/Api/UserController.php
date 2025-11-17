@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 
 class UserController extends Controller
 {
@@ -371,7 +373,7 @@ class UserController extends Controller
                 'message' => 'Certificate file path not set. Certificate may still be processing.',
             ], 404);
         }
-        
+
         try {
             // Check if file exists
             if (!Storage::disk('public')->exists($certificate->certificate_path)) {
@@ -382,10 +384,10 @@ class UserController extends Controller
             }
 
             // Download the file
-            return Storage::disk('public')->download(
-                $certificate->certificate_path,
-                'certificate-' . $certificate->certificate_number . '.pdf'
-            );
+        return Storage::disk('public')->download(
+            $certificate->certificate_path,
+            'certificate-' . $certificate->certificate_number . '.pdf'
+        );
         } catch (\Exception $e) {
             // Log the error for debugging
             Log::error('Certificate download error', [
@@ -486,33 +488,236 @@ class UserController extends Controller
             ]);
         }
 
-        // TODO: Implement certificate generation logic (PDF generation)
-        // For now, create certificate with 'issued' status so download button appears
-        // Note: Actual PDF file generation will be implemented later
+        // Generate certificate number
         $certificateNumber = 'CERT-' . date('Y') . '-' . strtoupper(substr(md5(time() . $id), 0, 8));
         $certificatePath = 'certificates/' . $certificateNumber . '.pdf';
         
+        // Load event and user data
+        $event = $registration->event;
+        $userData = $user;
+        
+        // Generate PDF certificate
+        try {
+            $pdf = $this->generateCertificatePdf($userData, $event, $certificateNumber, $registration);
+            
+            // Save PDF to storage
+            Storage::disk('public')->put($certificatePath, $pdf);
+            
+            // Create certificate record
         $certificate = Certificate::create([
             'event_id' => $registration->event_id,
             'user_id' => $user->id,
             'registration_id' => $id,
-            'certificate_number' => $certificateNumber,
-            'certificate_path' => $certificatePath, // Path will be created when PDF generation is implemented
-            'status' => 'issued', // Set to 'issued' so download button appears
-            'issued_at' => now(),
+                'certificate_number' => $certificateNumber,
+                'certificate_path' => $certificatePath,
+                'status' => 'issued',
+                'issued_at' => now(),
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Sertifikat berhasil dibuat.',
-            'certificate' => [
-                'id' => $certificate->id,
-                'available' => true, // Set to true so download button appears
-                'status' => $certificate->status,
-                'certificate_number' => $certificate->certificate_number,
-                'certificate_url' => $certificate->certificate_url,
-            ],
-        ]);
+                'message' => 'Sertifikat berhasil dibuat.',
+                'certificate' => [
+                    'id' => $certificate->id,
+                    'available' => true,
+                    'status' => $certificate->status,
+                    'certificate_number' => $certificate->certificate_number,
+                    'certificate_url' => $certificate->certificate_url,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Certificate PDF generation failed', [
+                'registration_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal membuat sertifikat: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate PDF certificate
+     */
+    private function generateCertificatePdf($user, $event, $certificateNumber, $registration)
+    {
+        // Format event date
+        $eventDate = $event->event_date 
+            ? Carbon::parse($event->event_date)->locale('id')->translatedFormat('d F Y')
+            : 'N/A';
+        
+        // Format issued date
+        $issuedDate = now()->locale('id')->translatedFormat('d F Y');
+        
+        // HTML template for certificate
+        $html = '
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                @page {
+                    margin: 0;
+                    size: A4 landscape;
+                }
+                body {
+                    margin: 0;
+                    padding: 0;
+                    font-family: "Times New Roman", serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                }
+                .certificate-container {
+                    width: 100%;
+                    height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 40px;
+                    box-sizing: border-box;
+                }
+                .certificate {
+                    width: 100%;
+                    max-width: 900px;
+                    background: white;
+                    border: 20px solid #d4af37;
+                    padding: 60px;
+                    box-shadow: 0 10px 50px rgba(0,0,0,0.3);
+                    text-align: center;
+                    position: relative;
+                }
+                .certificate::before {
+                    content: "";
+                    position: absolute;
+                    top: 20px;
+                    left: 20px;
+                    right: 20px;
+                    bottom: 20px;
+                    border: 3px solid #d4af37;
+                }
+                .certificate-header {
+                    font-size: 48px;
+                    font-weight: bold;
+                    color: #2c3e50;
+                    margin-bottom: 20px;
+                    text-transform: uppercase;
+                    letter-spacing: 5px;
+                }
+                .certificate-subtitle {
+                    font-size: 24px;
+                    color: #7f8c8d;
+                    margin-bottom: 40px;
+                    font-style: italic;
+                }
+                .certificate-body {
+                    margin: 40px 0;
+                }
+                .certificate-text {
+                    font-size: 20px;
+                    color: #34495e;
+                    line-height: 1.8;
+                    margin-bottom: 30px;
+                }
+                .certificate-name {
+                    font-size: 36px;
+                    font-weight: bold;
+                    color: #2c3e50;
+                    margin: 30px 0;
+                    text-decoration: underline;
+                    text-decoration-color: #d4af37;
+                    text-decoration-thickness: 3px;
+                }
+                .certificate-event {
+                    font-size: 24px;
+                    color: #2c3e50;
+                    font-weight: bold;
+                    margin: 20px 0;
+                }
+                .certificate-details {
+                    font-size: 18px;
+                    color: #7f8c8d;
+                    margin: 20px 0;
+                    line-height: 1.6;
+                }
+                .certificate-footer {
+                    margin-top: 60px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-end;
+                }
+                .certificate-signature {
+                    text-align: center;
+                    width: 200px;
+                }
+                .signature-line {
+                    border-top: 2px solid #2c3e50;
+                    margin-top: 60px;
+                    padding-top: 10px;
+                    font-size: 16px;
+                    color: #7f8c8d;
+                }
+                .certificate-number {
+                    position: absolute;
+                    bottom: 20px;
+                    right: 40px;
+                    font-size: 12px;
+                    color: #95a5a6;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="certificate-container">
+                <div class="certificate">
+                    <div class="certificate-header">Sertifikat</div>
+                    <div class="certificate-subtitle">Certificate of Participation</div>
+                    
+                    <div class="certificate-body">
+                        <div class="certificate-text">
+                            Dengan ini menyatakan bahwa
+                        </div>
+                        <div class="certificate-name">' . htmlspecialchars($user->name) . '</div>
+                        <div class="certificate-text">
+                            telah berpartisipasi dalam
+                        </div>
+                        <div class="certificate-event">' . htmlspecialchars($event->title) . '</div>
+                        <div class="certificate-details">
+                            Tanggal: ' . htmlspecialchars($eventDate) . '<br>
+                            Lokasi: ' . htmlspecialchars($event->location ?? 'N/A') . '
+                        </div>
+                    </div>
+                    
+                    <div class="certificate-footer">
+                        <div class="certificate-signature">
+                            <div class="signature-line">Ketua Panitia</div>
+                        </div>
+                        <div class="certificate-signature">
+                            <div class="signature-line">Direktur</div>
+                        </div>
+                    </div>
+                    
+                    <div class="certificate-number">
+                        No. ' . htmlspecialchars($certificateNumber) . '<br>
+                        Diterbitkan: ' . htmlspecialchars($issuedDate) . '
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>';
+        
+        // Configure Dompdf
+        $options = new Options();
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', true);
+        $options->set('defaultFont', 'Times New Roman');
+        
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4', 'landscape');
+        $dompdf->render();
+        
+        return $dompdf->output();
     }
 
     /**
