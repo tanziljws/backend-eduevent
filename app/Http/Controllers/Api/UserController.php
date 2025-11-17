@@ -472,7 +472,7 @@ class UserController extends Controller
                 'bearer_token' => $request->bearerToken() ? 'present' : 'missing',
             ]);
             
-        $user = $request->user();
+            $user = $request->user();
             
             // If user is not authenticated via header, try to authenticate via query parameter token
             if (!$user && $request->has('token')) {
@@ -503,8 +503,8 @@ class UserController extends Controller
                 'user_id' => $user->id,
             ]);
             
-        $certificate = Certificate::where('id', $id)
-            ->where('user_id', $user->id)
+            $certificate = Certificate::where('id', $id)
+                ->where('user_id', $user->id)
                 ->with(['registration', 'event', 'user'])
                 ->first();
 
@@ -514,11 +514,11 @@ class UserController extends Controller
                     'user_id' => $user->id,
                 ]);
                 
-            return response()->json([
-                'success' => false,
+                return response()->json([
+                    'success' => false,
                     'message' => 'Certificate not found or you do not have access to this certificate.',
-            ], 404);
-        }
+                ], 404);
+            }
 
             Log::info('Certificate found', [
                 'certificate_id' => $certificate->id,
@@ -634,18 +634,63 @@ class UserController extends Controller
             }
 
             // Download the file
+            Log::info('Preparing to download certificate file', [
+                'certificate_id' => $certificate->id,
+                'certificate_path' => $certificate->certificate_path,
+            ]);
+            
             $filePath = Storage::disk('public')->path($certificate->certificate_path);
             
+            Log::info('File path resolved', [
+                'certificate_id' => $certificate->id,
+                'file_path' => $filePath,
+                'file_exists' => file_exists($filePath),
+            ]);
+            
             if (!file_exists($filePath)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Certificate file not found at path: ' . $certificate->certificate_path,
-                ], 404);
+                Log::error('Certificate file not found on disk', [
+                    'certificate_id' => $certificate->id,
+                    'certificate_path' => $certificate->certificate_path,
+                    'resolved_path' => $filePath,
+                ]);
+                
+                // Try to regenerate if file doesn't exist
+                try {
+                    Log::info('Attempting to regenerate certificate file', [
+                        'certificate_id' => $certificate->id,
+                    ]);
+                    $generatePdfForCertificate($certificate);
+                    // Reload certificate to get updated path
+                    $certificate->refresh();
+                    $filePath = Storage::disk('public')->path($certificate->certificate_path);
+                    
+                    if (!file_exists($filePath)) {
+                        throw new \Exception('File still not found after regeneration');
+                    }
+                } catch (\Exception $regenerateError) {
+                    Log::error('Failed to regenerate certificate file', [
+                        'certificate_id' => $certificate->id,
+                        'error' => $regenerateError->getMessage(),
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Certificate file not found and regeneration failed. Please try generating the certificate again.',
+                    ], 404);
+                }
             }
             
-            return response()->file($filePath, [
+            $filename = 'certificate-' . ($certificate->certificate_number ?: 'certificate-' . $certificate->id) . '.pdf';
+            
+            Log::info('Returning certificate file for download', [
+                'certificate_id' => $certificate->id,
+                'filename' => $filename,
+                'file_size' => filesize($filePath),
+            ]);
+            
+            // Use response()->download() for better compatibility with blob downloads
+            return response()->download($filePath, $filename, [
                 'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'attachment; filename="certificate-' . ($certificate->certificate_number ?: 'certificate-' . $certificate->id) . '.pdf"',
             ]);
             
         } catch (\Exception $e) {

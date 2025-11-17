@@ -119,6 +119,20 @@ export const userService = {
         console.error('❌ METHOD 1 failed:', blobError.message);
         console.error('Status:', blobError.response?.status);
         
+        // If it's a 500 error, try to get error message from response
+        if (blobError.response?.status === 500) {
+          try {
+            if (blobError.response?.data instanceof Blob) {
+              const text = await blobError.response.data.text();
+              const json = JSON.parse(text);
+              console.error('Error message from server:', json.message);
+              throw new Error(json.message || 'Server error occurred while downloading certificate');
+            }
+          } catch (parseError) {
+            // If parsing fails, continue to METHOD 2
+          }
+        }
+        
         // METHOD 2: Try direct window.open as fallback
         console.log('\nTrying METHOD 2: Direct window.open...');
         

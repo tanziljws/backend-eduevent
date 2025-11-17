@@ -71,12 +71,15 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
       
       // Try to extract error message from blob response
       let errorMessage = 'Gagal mengunduh sertifikat';
+      
       if (error.response?.data instanceof Blob) {
         try {
           const text = await error.response.data.text();
           const json = JSON.parse(text);
           errorMessage = json.message || errorMessage;
+          console.error('Error message from blob:', errorMessage);
         } catch (e) {
+          console.error('Failed to parse blob error:', e);
           // If parsing fails, use default message
         }
       } else if (error.response?.data?.message) {
@@ -85,8 +88,12 @@ const EventHistoryCard = ({ eventData, onRefresh }) => {
         errorMessage = error.message;
       }
       
-      // If certificate file not found or 500 error, it might still be processing
-      if (error.response?.status === 404 || error.response?.status === 500 || errorMessage.includes('not found') || errorMessage.includes('processing')) {
+      // If certificate file not found or 500 error, show specific message
+      if (error.response?.status === 404) {
+        alert('File sertifikat tidak ditemukan. Silakan generate sertifikat terlebih dahulu.');
+      } else if (error.response?.status === 500) {
+        alert(`Error server: ${errorMessage}. Silakan coba lagi atau hubungi admin jika masalah berlanjut.`);
+      } else if (errorMessage.includes('not found') || errorMessage.includes('processing')) {
         alert('File sertifikat belum tersedia. Sertifikat masih dalam proses. Silakan refresh halaman dalam beberapa saat.');
         // Refresh data to check for updates
         if (onRefresh) {
