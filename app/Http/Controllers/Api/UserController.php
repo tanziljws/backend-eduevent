@@ -367,103 +367,85 @@ class UserController extends Controller
             ], 404);
         }
 
-        // Check if certificate file exists, if not, try to generate it
-        if (!$certificate->certificate_path) {
-            // Try to generate PDF if certificate exists but path is missing
+        // Helper function to generate PDF for certificate
+        $generatePdfForCertificate = function($cert) use ($user) {
             try {
-                $registration = $certificate->registration;
-                $event = $certificate->event;
-                $userData = $certificate->user;
-                
-                if ($registration && $event && $userData) {
-                    $certificateNumber = $certificate->certificate_number ?: 'CERT-' . date('Y') . '-' . strtoupper(substr(md5(time() . $certificate->id), 0, 8));
-                    $certificatePath = 'certificates/' . $certificateNumber . '.pdf';
-                    
-                    $pdf = $this->generateCertificatePdf($userData, $event, $certificateNumber, $registration);
-                    
-                    // Ensure certificates directory exists
-                    $certificatesDir = storage_path('app/public/certificates');
-                    if (!file_exists($certificatesDir)) {
-                        mkdir($certificatesDir, 0755, true);
-                    }
-                    
-                    Storage::disk('public')->put($certificatePath, $pdf);
-                    
-                    // Update certificate with path
-                    $certificate->certificate_path = $certificatePath;
-                    if (!$certificate->certificate_number) {
-                        $certificate->certificate_number = $certificateNumber;
-                    }
-                    $certificate->save();
-                } else {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Certificate data incomplete. Cannot generate PDF.',
-                    ], 404);
+                // Reload certificate with relationships if not loaded
+                if (!$cert->relationLoaded('registration') || !$cert->relationLoaded('event') || !$cert->relationLoaded('user')) {
+                    $cert->load(['registration', 'event', 'user']);
                 }
-            } catch (\Exception $e) {
-                Log::error('Auto-generate certificate PDF failed', [
-                    'certificate_id' => $certificate->id,
-                    'error' => $e->getMessage(),
-                ]);
                 
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Certificate file not found and generation failed. Please try generating again.',
-                ], 404);
+                $registration = $cert->registration;
+                $event = $cert->event;
+                $userData = $cert->user;
+                
+                if (!$registration || !$event || !$userData) {
+                    throw new \Exception('Certificate relationships not found. Registration: ' . ($registration ? 'yes' : 'no') . ', Event: ' . ($event ? 'yes' : 'no') . ', User: ' . ($userData ? 'yes' : 'no'));
+                }
+                
+                $certificateNumber = $cert->certificate_number ?: 'CERT-' . date('Y') . '-' . strtoupper(substr(md5(time() . $cert->id), 0, 8));
+                $certificatePath = 'certificates/' . $certificateNumber . '.pdf';
+                
+                $pdf = $this->generateCertificatePdf($userData, $event, $certificateNumber, $registration);
+                
+                // Ensure certificates directory exists
+                $certificatesDir = storage_path('app/public/certificates');
+                if (!file_exists($certificatesDir)) {
+                    if (!mkdir($certificatesDir, 0755, true)) {
+                        throw new \Exception('Failed to create certificates directory');
+                    }
+                }
+                
+                if (!Storage::disk('public')->put($certificatePath, $pdf)) {
+                    throw new \Exception('Failed to save PDF file to storage');
+                }
+                
+                // Update certificate with path
+                $cert->certificate_path = $certificatePath;
+                if (!$cert->certificate_number) {
+                    $cert->certificate_number = $certificateNumber;
+                }
+                $cert->save();
+                
+                return $certificatePath;
+            } catch (\Exception $e) {
+                Log::error('Generate PDF for certificate failed', [
+                    'certificate_id' => $cert->id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+                throw $e;
             }
-        }
+        };
         
         try {
-            // Check if file exists, if not try to regenerate
-            if (!Storage::disk('public')->exists($certificate->certificate_path)) {
-                // Try to regenerate PDF
+            // Check if certificate file exists, if not, try to generate it
+            if (!$certificate->certificate_path) {
                 try {
-                    $registration = $certificate->registration;
-                    $event = $certificate->event;
-                    $userData = $certificate->user;
-                    
-                    if ($registration && $event && $userData) {
-                        $certificateNumber = $certificate->certificate_number ?: 'CERT-' . date('Y') . '-' . strtoupper(substr(md5(time() . $certificate->id), 0, 8));
-                        $certificatePath = $certificate->certificate_path ?: 'certificates/' . $certificateNumber . '.pdf';
-                        
-                        $pdf = $this->generateCertificatePdf($userData, $event, $certificateNumber, $registration);
-                        
-                        // Ensure certificates directory exists
-                        $certificatesDir = storage_path('app/public/certificates');
-                        if (!file_exists($certificatesDir)) {
-                            mkdir($certificatesDir, 0755, true);
-                        }
-                        
-                        Storage::disk('public')->put($certificatePath, $pdf);
-                        
-                        // Update certificate path if needed
-                        if ($certificate->certificate_path !== $certificatePath) {
-                            $certificate->certificate_path = $certificatePath;
-                            $certificate->save();
-                        }
-                    } else {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Certificate file not found. Certificate data incomplete.',
-                        ], 404);
-                    }
+                    $generatePdfForCertificate($certificate);
                 } catch (\Exception $e) {
-                    Log::error('Regenerate certificate PDF failed', [
-                        'certificate_id' => $certificate->id,
-                        'error' => $e->getMessage(),
-                    ]);
-                    
                     return response()->json([
                         'success' => false,
-                        'message' => 'Certificate file not found. Please try generating again.',
-                    ], 404);
+                        'message' => 'Certificate file not found and generation failed: ' . $e->getMessage() . '. Please try generating again.',
+                    ], 500);
+                }
+            }
+            
+            // Check if file exists, if not try to regenerate
+            if (!Storage::disk('public')->exists($certificate->certificate_path)) {
+                try {
+                    $generatePdfForCertificate($certificate);
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Certificate file not found and regeneration failed: ' . $e->getMessage() . '. Please try generating again.',
+                    ], 500);
                 }
             }
 
             // Download the file
-        return Storage::disk('public')->download(
-            $certificate->certificate_path,
+            return Storage::disk('public')->download(
+                $certificate->certificate_path,
                 'certificate-' . ($certificate->certificate_number ?: 'certificate-' . $certificate->id) . '.pdf'
             );
         } catch (\Exception $e) {
