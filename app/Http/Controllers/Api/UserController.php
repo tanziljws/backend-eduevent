@@ -476,10 +476,19 @@ class UserController extends Controller
             }
 
             // Download the file
-            return Storage::disk('public')->download(
-                $certificate->certificate_path,
-                'certificate-' . ($certificate->certificate_number ?: 'certificate-' . $certificate->id) . '.pdf'
-            );
+            $filePath = Storage::disk('public')->path($certificate->certificate_path);
+            
+            if (!file_exists($filePath)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Certificate file not found at path: ' . $certificate->certificate_path,
+                ], 404);
+            }
+            
+            return response()->file($filePath, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="certificate-' . ($certificate->certificate_number ?: 'certificate-' . $certificate->id) . '.pdf"',
+            ]);
         } catch (\Exception $e) {
             // Log the error for debugging
             Log::error('Certificate download error', [
