@@ -215,14 +215,17 @@ function Navbar() {
                       </div>
                     </div>
                     
-                    {/* Riwayat Link */}
-                    <Link
-                      to="/event-history"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center justify-center w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Riwayat
-                    </Link>
+                    {/* My Profile Link - only for regular users, not admin */}
+                    {!isAdmin && (
+                      <Link
+                        to="/profile"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="flex items-center justify-center w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        <User className="w-4 h-4 mr-2" />
+                        My Profile
+                      </Link>
+                    )}
 
                     {/* Admin Panel Link */}
                     {isAdmin && (
