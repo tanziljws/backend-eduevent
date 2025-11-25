@@ -353,7 +353,23 @@ const AdminEvents = () => {
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm(true)) return; // true = edit event, validasi H-3 tidak berlaku
+    e.stopPropagation();
+    
+    console.log('🔵 handleEditSubmit called', { editingEventId, formData });
+    
+    // Validate form
+    const isValid = validateForm(true); // true = edit event, validasi H-3 tidak berlaku
+    console.log('🔵 Form validation result:', isValid, 'Errors:', formErrors);
+    
+    if (!isValid) {
+      console.log('❌ Form validation failed:', formErrors);
+      setNotice({ 
+        type: 'error', 
+        message: 'Mohon lengkapi semua field yang wajib diisi.' 
+      });
+      return;
+    }
+    
     try {
       setSubmitting(true);
       setFormErrors({});
@@ -808,7 +824,14 @@ const AdminEvents = () => {
                     <h3 className="text-lg font-semibold text-gray-800">Edit Event</h3>
                     <button onClick={() => setShowEdit(false)} className="text-gray-500 hover:text-gray-700">✕</button>
                   </div>
-                  <form onSubmit={handleEditSubmit} className="flex flex-col max-h-[75vh]">
+                  <form 
+                    onSubmit={(e) => {
+                      console.log('🔵 Form onSubmit triggered');
+                      handleEditSubmit(e);
+                    }} 
+                    className="flex flex-col max-h-[75vh]"
+                    noValidate
+                  >
                   <div className="px-6 py-4 space-y-6 overflow-auto">
                   {/* Section: Informasi Dasar */}
                   <div>
@@ -1008,7 +1031,16 @@ const AdminEvents = () => {
                     </label>
                     <div className="flex gap-3">
                       <motion.button type="button" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => setShowEdit(false)} className="px-4 py-2 rounded-lg border">Batal</motion.button>
-                      <motion.button type="submit" whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} disabled={submitting} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                      <motion.button 
+                        type="submit" 
+                        whileHover={{ y: -1 }} 
+                        whileTap={{ scale: 0.98 }} 
+                        disabled={submitting} 
+                        onClick={(e) => {
+                          console.log('🔵 Submit button clicked');
+                        }}
+                        className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
                         {submitting ? 'Menyimpan...' : 'Simpan Perubahan'}
                       </motion.button>
                     </div>
