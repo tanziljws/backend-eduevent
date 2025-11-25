@@ -162,7 +162,14 @@ const AdminEvents = () => {
   // Form handlers (must be at component scope, not inside fetchEvents)
   const validateForm = (isEdit = false) => {
     const errs = {};
-    if (!formData.title?.trim()) errs.title = 'Judul wajib diisi';
+    
+    // Saat edit, hanya validasi field yang benar-benar kosong atau field yang diubah
+    // Ini memungkinkan user untuk hanya mengubah 1 field saja (misalnya harga)
+    
+    if (!formData.title?.trim()) {
+      errs.title = 'Judul wajib diisi';
+    }
+    
     if (!formData.event_date) {
       errs.event_date = 'Tanggal event wajib diisi';
     } else if (!isEdit) {
@@ -182,17 +189,36 @@ const AdminEvents = () => {
         errs.event_date = `Event harus dibuat minimal H-3 (3 hari dari hari ini). Minimal tanggal: ${minDate.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
       }
     }
-    if (!formData.start_time) errs.start_time = 'Waktu mulai wajib diisi';
-    if (!formData.location?.trim()) errs.location = 'Lokasi wajib diisi';
-    if (!formData.category) errs.category = 'Kategori wajib dipilih';
+    
+    if (!formData.start_time) {
+      errs.start_time = 'Waktu mulai wajib diisi';
+    }
+    
+    if (!formData.location?.trim()) {
+      errs.location = 'Lokasi wajib diisi';
+    }
+    
+    if (!formData.category) {
+      errs.category = 'Kategori wajib dipilih';
+    }
+    
+    // Validasi harga: hanya jika event berbayar (is_free = false)
     if (formData.is_free === false) {
       const p = Number(formData.price);
-      if (!p || p < 1000) errs.price = 'Harga wajib diisi minimal Rp1.000 untuk event berbayar';
+      if (!p || p < 1000) {
+        errs.price = 'Harga wajib diisi minimal Rp1.000 untuk event berbayar';
+      }
     }
-    if (!formData.organizer?.trim()) errs.organizer = 'Penyelenggara event wajib diisi';
+    
+    if (!formData.organizer?.trim()) {
+      errs.organizer = 'Penyelenggara event wajib diisi';
+    }
+    
+    // Validasi max_participants: hanya jika kapasitas terbatas
     if (isCapacityLimited && (!formData.max_participants || formData.max_participants < 1)) {
       errs.max_participants = 'Kapasitas peserta wajib diisi minimal 1 orang';
     }
+    
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -311,12 +337,30 @@ const AdminEvents = () => {
 
   const openEditModal = (ev) => {
     setEditingEventId(ev.id);
+    
+    // Format waktu: pastikan format HH:mm (hilangkan detik jika ada)
+    let startTime = ev.start_time || '';
+    if (startTime && startTime.includes(':')) {
+      const timeParts = startTime.split(':');
+      if (timeParts.length >= 2) {
+        startTime = `${timeParts[0]}:${timeParts[1]}`;
+      }
+    }
+    
+    let endTime = ev.end_time || '';
+    if (endTime && endTime.includes(':')) {
+      const timeParts = endTime.split(':');
+      if (timeParts.length >= 2) {
+        endTime = `${timeParts[0]}:${timeParts[1]}`;
+      }
+    }
+    
     setFormData({
       title: ev.title || '',
       description: ev.description || '',
       event_date: ev.event_date ? ev.event_date.slice(0, 10) : '',
-      start_time: ev.start_time || '',
-      end_time: ev.end_time || '',
+      start_time: startTime || '',
+      end_time: endTime || '',
       location: ev.location || '',
       category: ev.category || 'teknologi',
       is_published: !!ev.is_published,
@@ -326,6 +370,16 @@ const AdminEvents = () => {
       organizer: ev.organizer || '',
       flyer_path: ev.flyer_path || null,
       certificate_template_path: null,
+    });
+    
+    // Log untuk debugging
+    console.log('📝 Edit modal opened with event data:', {
+      id: ev.id,
+      title: ev.title,
+      organizer: ev.organizer,
+      start_time: ev.start_time,
+      location: ev.location,
+      category: ev.category,
     });
     
     // Set capacity limited state
@@ -363,9 +417,25 @@ const AdminEvents = () => {
     
     if (!isValid) {
       console.log('❌ Form validation failed:', formErrors);
+      // Tampilkan field yang error secara lebih detail
+      const errorFields = Object.keys(formErrors);
+      const errorMessages = errorFields.map(field => {
+        const fieldName = {
+          title: 'Judul',
+          event_date: 'Tanggal',
+          start_time: 'Waktu Mulai',
+          location: 'Lokasi',
+          category: 'Kategori',
+          price: 'Harga',
+          organizer: 'Penyelenggara',
+          max_participants: 'Kapasitas Peserta'
+        }[field] || field;
+        return `${fieldName}: ${formErrors[field]}`;
+      }).join(', ');
+      
       setNotice({ 
         type: 'error', 
-        message: 'Mohon lengkapi semua field yang wajib diisi.' 
+        message: errorMessages || 'Mohon lengkapi semua field yang wajib diisi.' 
       });
       return;
     }
