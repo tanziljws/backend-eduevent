@@ -1043,6 +1043,19 @@ class EventController extends Controller
             if ($request->has('is_free')) {
                 $data['is_free'] = $request->boolean('is_free');
             }
+            
+            // Handle max_participants: convert empty string to null
+            if ($request->has('max_participants')) {
+                $maxParticipants = $request->input('max_participants');
+                if ($maxParticipants === '' || $maxParticipants === null || $maxParticipants === 'null') {
+                    $data['max_participants'] = null;
+                } else {
+                    $data['max_participants'] = (int) $maxParticipants;
+                }
+            } elseif ($request->has('max_participants') && $request->input('max_participants') === '') {
+                // Explicitly handle empty string
+                $data['max_participants'] = null;
+            }
 
             // Handle flyer upload
             if ($request->hasFile('flyer')) {
@@ -1068,14 +1081,38 @@ class EventController extends Controller
 
             DB::commit();
 
+            // Load creator relationship only if it exists
+            $eventData = $event->toArray();
+            if (Schema::hasTable('admins') && $event->created_by && Schema::hasColumn('events', 'created_by')) {
+                try {
+                    $event->load('creator');
+                    $eventData = $event->toArray();
+                } catch (\Exception $e) {
+                    // Ignore relationship loading errors
+                    \Log::warning('Error loading creator relationship: ' . $e->getMessage());
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Event berhasil diupdate.',
-                'event' => $event->load('creator'),
+                'event' => $eventData,
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Data tidak valid.',
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Error updating event: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'event_id' => $id,
+                'data' => $data ?? null,
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengupdate event.',

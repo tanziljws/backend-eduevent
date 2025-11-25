@@ -168,7 +168,9 @@ export const adminService = {
       formData = new FormData();
       Object.keys(eventData).forEach(key => {
         const val = eventData[key];
-        if (val === null || val === undefined) return;
+        
+        // Skip undefined, but include null values (for max_participants = null)
+        if (val === undefined) return;
 
         // Handle file uploads - don't normalize File objects
         if (key === 'flyer_path' && val instanceof File) {
@@ -181,9 +183,17 @@ export const adminService = {
         }
 
         // Normalize booleans to '1'/'0' so Laravel boolean validation works reliably
-        const normalized = typeof val === 'boolean' ? (val ? '1' : '0') : val;
-        formData.append(key, normalized);
+        if (typeof val === 'boolean') {
+          formData.append(key, val ? '1' : '0');
+        } else if (val === null) {
+          // Explicitly send null as empty string for Laravel to handle
+          formData.append(key, '');
+        } else {
+          formData.append(key, val);
+        }
       });
+      
+      console.log('FormData entries:', Array.from(formData.entries()));
     }
     
     // Use PUT method directly for API routes
@@ -191,8 +201,17 @@ export const adminService = {
     // This ensures Authorization header is preserved
     // Use POST + method override to avoid strict CORS preflight issues on PUT with Bearer tokens
     formData.append('_method', 'PUT');
-    const response = await api.post(`/admin/events/${eventId}`, formData);
-    return response.data;
+    
+    console.log('Updating event via API:', eventId);
+    try {
+      const response = await api.post(`/admin/events/${eventId}`, formData);
+      console.log('Update event API response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Update event API error:', error);
+      console.error('Error response:', error?.response?.data);
+      throw error;
+    }
   },
 
   publishEvent: async (eventId, isPublished) => {

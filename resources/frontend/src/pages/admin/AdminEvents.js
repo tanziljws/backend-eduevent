@@ -356,32 +356,75 @@ const AdminEvents = () => {
     if (!validateForm(true)) return; // true = edit event, validasi H-3 tidak berlaku
     try {
       setSubmitting(true);
+      setFormErrors({});
       
       // Always use the object format, adminService will handle FormData conversion
       const submitData = { ...formData };
       
+      // Handle max_participants: if not limited, set to null
+      if (!isCapacityLimited) {
+        submitData.max_participants = null;
+      } else if (submitData.max_participants === '' || submitData.max_participants === undefined) {
+        submitData.max_participants = null;
+      }
+      
       // Add flyer file if exists
       if (flyerFile) {
         submitData.flyer_path = flyerFile;
+      } else {
+        // Don't send flyer_path if no new file (keep existing)
+        delete submitData.flyer_path;
       }
       
       // Add certificate template file if exists
       if (certificateTemplateFile) {
         submitData.certificate_template_path = certificateTemplateFile;
+      } else {
+        // Don't send certificate_template_path if no new file (keep existing)
+        delete submitData.certificate_template_path;
       }
       
-      await adminService.updateEvent(editingEventId, submitData);
+      console.log('Updating event:', editingEventId, submitData);
+      const response = await adminService.updateEvent(editingEventId, submitData);
+      console.log('Update event response:', response);
+      
+      // Show success message
+      setNotice({ 
+        type: 'success', 
+        message: response?.message || 'Event berhasil diperbarui.' 
+      });
+      
+      // Close modal and reset
       setShowEdit(false);
       setEditingEventId(null);
       setFlyerFile(null);
       setFlyerPreview(null);
       setCertificateTemplateFile(null);
       setCertificateTemplatePreview(null);
+      setFormErrors({});
+      
+      // Refresh events list
       await fetchEvents();
     } catch (error) {
       console.error('Update event error:', error);
-      const msg = error?.response?.data?.message || 'Gagal memperbarui event.';
-      alert(msg);
+      console.error('Error response:', error?.response);
+      
+      // Handle validation errors
+      if (error?.response?.status === 422 && error?.response?.data?.errors) {
+        const validationErrors = {};
+        Object.keys(error.response.data.errors).forEach(key => {
+          validationErrors[key] = error.response.data.errors[key][0];
+        });
+        setFormErrors(validationErrors);
+        setNotice({ 
+          type: 'error', 
+          message: error?.response?.data?.message || 'Data tidak valid. Silakan periksa form.' 
+        });
+      } else {
+        // Handle other errors
+        const msg = error?.response?.data?.message || error?.message || 'Gagal memperbarui event.';
+        setNotice({ type: 'error', message: msg });
+      }
     } finally {
       setSubmitting(false);
     }
